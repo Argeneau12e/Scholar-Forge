@@ -185,8 +185,11 @@ export function SnippetCard({
     <>
       <article
         className={cn(
-          "rounded-xl border bg-card p-5 space-y-3 transition-shadow hover:shadow-md",
-          compliance.level === "red" && "border-red-200"
+          "rounded-xl bg-card p-5 space-y-3",
+          "border border-l-4 transition-all duration-200 hover:-translate-y-px hover:shadow-md",
+          compliance.level === "red"    ? "border-l-red-500"     :
+          compliance.level === "yellow" ? "border-l-amber-400"   :
+                                          "border-l-emerald-500"
         )}
         data-testid={`snippet-card-${paper.id}`}
       >
@@ -435,21 +438,21 @@ export function SnippetCard({
 // ─── Loading skeleton ────────────────────────────────────────────────────────
 export function SnippetCardSkeleton() {
   return (
-    <div className="rounded-xl border bg-card p-5 space-y-3 animate-pulse">
+    <div className="rounded-xl border border-l-4 border-l-muted bg-card p-5 space-y-3">
       <div className="space-y-2">
-        <div className="h-5 bg-muted rounded w-4/5" />
-        <div className="h-5 bg-muted rounded w-3/5" />
-        <div className="h-3.5 bg-muted rounded w-1/3 mt-1" />
+        <div className="h-5 rounded w-4/5 sf-shimmer" />
+        <div className="h-5 rounded w-3/5 sf-shimmer" />
+        <div className="h-3.5 rounded w-1/3 mt-1 sf-shimmer" />
       </div>
-      <div className="h-2 bg-muted rounded w-20" />
+      <div className="h-2 rounded w-20 sf-shimmer" />
       <div className="space-y-1.5">
-        <div className="h-3.5 bg-muted rounded" />
-        <div className="h-3.5 bg-muted rounded w-5/6" />
+        <div className="h-3.5 rounded sf-shimmer" />
+        <div className="h-3.5 rounded w-5/6 sf-shimmer" />
       </div>
-      <div className="h-16 bg-muted/60 rounded-lg" />
+      <div className="h-16 rounded-lg sf-shimmer" />
       <div className="flex gap-2 pt-1">
-        <div className="h-8 bg-muted rounded w-32" />
-        <div className="h-8 bg-muted rounded w-36" />
+        <div className="h-8 rounded w-32 sf-shimmer" />
+        <div className="h-8 rounded w-36 sf-shimmer" />
       </div>
     </div>
   );

@@ -85,12 +85,35 @@ function scoreColor(s: number): string {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
+const RING_R = 22;
+const RING_CIRC = 2 * Math.PI * RING_R;
+const RING_COLOR: Record<string, string> = { green: "#2d6a4f", amber: "#b45309", red: "#dc2626" };
+
 function ScoreCard({ label, score }: { label: string; score: number }) {
+  const tier = score >= 8 ? "green" : score >= 5 ? "amber" : "red";
+  const ringColor = RING_COLOR[tier];
+  const offset = RING_CIRC * (1 - score / 10);
+
   return (
-    <div className={cn("rounded-xl border p-4 text-center", scoreColor(score))}>
-      <div className="text-3xl font-bold tabular-nums leading-none">{score}</div>
-      <div className="text-[10px] font-bold uppercase tracking-wider mt-1.5 opacity-80">{label}</div>
-      <div className="text-[10px] opacity-50 mt-0.5">out of 10</div>
+    <div className={cn("rounded-xl border p-3 text-center flex flex-col items-center gap-1.5", scoreColor(score))}>
+      <div className="relative flex items-center justify-center" style={{ width: 56, height: 56 }}>
+        <svg className="absolute inset-0" style={{ transform: "rotate(-90deg)" }} width={56} height={56}>
+          <circle cx={28} cy={28} r={RING_R} fill="none" stroke="currentColor" strokeWidth={3} className="opacity-15" />
+          <circle
+            cx={28} cy={28} r={RING_R}
+            fill="none"
+            stroke={ringColor}
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeDasharray={RING_CIRC}
+            strokeDashoffset={offset}
+            style={{ transition: "stroke-dashoffset 0.7s cubic-bezier(.4,0,.2,1)" }}
+          />
+        </svg>
+        <span className="text-2xl font-bold tabular-nums leading-none">{score}</span>
+      </div>
+      <div className="text-[10px] font-bold uppercase tracking-wider opacity-80 leading-tight">{label}</div>
+      <div className="text-[10px] opacity-45">/ 10</div>
     </div>
   );
 }

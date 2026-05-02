@@ -1,0 +1,162 @@
+You are a senior product designer and frontend engineer specializing in 
+academic and productivity tools. Perform a complete UI upgrade on the 
+ScholarForge codebase. Do not change any functionality — only improve 
+visual design, layout, typography, spacing, and component polish.
+
+DESIGN DIRECTION:
+ScholarForge should feel like a premium academic tool — calm, focused, 
+trustworthy. Think Notion meets a university library. Not a startup SaaS. 
+Not a student project. A tool a professor would trust.
+
+TYPOGRAPHY:
+- Import 'Lora' (serif) from Google Fonts for all headings (h1-h3)
+- Import 'Inter' (sans-serif) for all body text, labels, inputs
+- Heading scale: h1=28px/500, h2=22px/500, h3=18px/500
+- Body: 14px/400, line-height 1.7
+- Labels: 11px/500, uppercase, letter-spacing 0.06em, color tertiary
+- Never use font-weight 600 or 700 — use 500 for bold, 400 for regular
+
+COLOR SYSTEM (apply globally via CSS variables in index.css):
+--sf-bg:          #f8f7f4   (warm off-white — main background)
+--sf-surface:     #ffffff   (cards, panels)
+--sf-surface-2:   #f1f0ec   (secondary surfaces, hover states)
+--sf-border:      rgba(0,0,0,0.08)  (all borders, 0.5px)
+--sf-border-strong: rgba(0,0,0,0.16)
+--sf-text-1:      #1a1a2e   (primary text)
+--sf-text-2:      #4a5568   (secondary text)
+--sf-text-3:      #9ca3af   (hints, placeholders)
+--sf-mint:        #2d6a4f   (primary accent — buttons, active states)
+--sf-mint-light:  #d1fae5   (mint tint — badges, highlights)
+--sf-mint-mid:    #40916c   (hover state for mint)
+--sf-amber:       #b45309   (warnings)
+--sf-amber-light: #fef3c7
+--sf-red:         #dc2626   (errors, violations)
+--sf-red-light:   #fee2e2
+--sf-blue:        #1d4ed8   (links, info)
+--sf-blue-light:  #dbeafe
+--sf-purple:      #6d28d9   (new features, argument mapper)
+--sf-purple-light:#ede9fe
+--sf-shadow-sm:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)
+--sf-shadow-md:   0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04)
+--sf-radius-sm:   6px
+--sf-radius-md:   10px
+--sf-radius-lg:   16px
+
+LAYOUT IMPROVEMENTS:
+1. Navigation bar: 
+   - Height 56px, background white, bottom border 0.5px --sf-border
+   - Logo: "Scholar" in --sf-mint Lora serif + "Forge" in --sf-text-2 
+     Inter — same size, side by side
+   - Nav links: 13px Inter, --sf-text-2, hover --sf-text-1
+   - Active nav item: --sf-mint color, 2px bottom border in --sf-mint
+   - Right side: supervisor config pills + GitHub icon button
+
+2. Sidebar (search panel):
+   - Width 300px, background --sf-surface, right border 0.5px --sf-border
+   - Section headers: 11px uppercase labels with 16px top margin
+   - All inputs: 36px height, 12px horizontal padding, --sf-border border,
+     --sf-radius-sm, focus ring 2px --sf-mint at 30% opacity
+   - Search button: full width, 40px height, --sf-mint background, 
+     white text, --sf-radius-sm, hover --sf-mint-mid
+   - Smooth transition on all interactive elements: 0.15s ease
+
+3. Snippet cards:
+   - Background --sf-surface, border 0.5px --sf-border, 
+     --sf-radius-md, --sf-shadow-sm
+   - Hover: border-color --sf-border-strong, --sf-shadow-md, 
+     translateY(-1px) — smooth lift effect (transition 0.2s)
+   - Left accent bar (4px wide): 
+     green if supervisor-compliant, amber if warning, red if violation
+   - Paper title: 15px Lora serif, --sf-text-1, hover --sf-mint
+   - Metadata row: 12px Inter, --sf-text-3, with separator dots
+   - Snippet highlight box: --sf-surface-2 background, left border 3px 
+     --sf-mint, 10px padding, 13px mono font, italic
+   - Matching phrase words: --sf-mint-light background highlight inline
+   - Action buttons: ghost style (border 0.5px, transparent bg, 
+     hover --sf-surface-2), 32px height, 13px text
+
+4. Collection workspace:
+   - Items as a reorderable list with visible drag handles (⋮⋮ icon, 
+     appears on hover)
+   - Compliance dot: 8px circle, left of title
+   - Tag chips: 11px, --sf-surface-2 bg, --sf-border border, 
+     --sf-radius-sm, 4px 8px padding
+   - Add tag input: appears inline on click, disappears on blur
+
+5. Gap finder cards — type-specific left borders:
+   - Population: --sf-purple, background --sf-purple-light at 30% opacity
+   - Timeframe: --sf-blue, background --sf-blue-light at 30%
+   - Methodology: --sf-amber, background --sf-amber-light at 30%
+   - Contradiction: --sf-red, background --sf-red-light at 30%
+   - Strongest angle card: full --sf-mint-light background, 
+     --sf-mint border, star icon top-right
+
+6. Lit review editor:
+   - Clean white writing surface, 720px max-width, centered
+   - [STUDENT: ...] spans: --sf-amber-light background, 
+     --sf-amber text, rounded
+   - [SUGGESTION: ...] spans: --sf-blue-light background, 
+     --sf-blue text, rounded
+   - Floating toolbar: sticky top, white bg, --sf-border bottom border
+   - Word count: fixed bottom-right, pill shape, --sf-surface bg, 
+     --sf-shadow-sm
+
+7. Writing coach scores:
+   - Score cards: large number (32px, 500 weight) centered
+   - Color: ≥8 --sf-mint, 5-7 --sf-amber, ≤4 --sf-red
+   - Progress ring behind the number using SVG stroke-dashoffset
+
+8. Argument mapper:
+   - Canvas background: --sf-bg (not white — gives depth)
+   - Node labels: 11px Inter, white text on colored nodes
+   - Tooltip: white card, --sf-shadow-md, 12px text, 200px max-width
+
+COMPONENT STANDARDS (apply everywhere):
+- Badges/pills: 11px/500, 3px 8px padding, --sf-radius-sm, 
+  always use semantic color variables
+- Skeleton loaders: --sf-surface-2 background, subtle shimmer animation
+  using @keyframes shimmer with background-position shift
+- Toast notifications: fixed bottom-right, --sf-surface bg, 
+  --sf-shadow-md, slide-up animation, auto-dismiss 3 seconds
+- Empty states: centered, 120px illustration space (use a simple SVG 
+  icon in --sf-text-3 color), 18px Lora heading, 14px body text, 
+  action button
+- Modals: backdrop rgba(0,0,0,0.4), white card centered, 
+  --sf-radius-lg, --sf-shadow-md, max-width 560px
+- Tooltips: 12px, dark bg (#1a1a2e), white text, 6px padding, 
+  --sf-radius-sm, appear after 400ms hover delay
+
+MICRO-INTERACTIONS (add to all interactive elements):
+- Button press: scale(0.97) on active
+- Card hover: translateY(-1px) + shadow upgrade
+- Input focus: border color transition to --sf-mint
+- Sidebar link active: --sf-mint-light background pill
+- Success states: brief green flash on save actions
+- All transitions: 0.15s ease unless specified otherwise
+
+DARK MODE:
+Add a toggle in the top nav (moon icon). When active, apply 
+[data-theme="dark"] on document root with these overrides:
+--sf-bg: #0f0f0f
+--sf-surface: #1a1a1a
+--sf-surface-2: #242424
+--sf-border: rgba(255,255,255,0.08)
+--sf-border-strong: rgba(255,255,255,0.16)
+--sf-text-1: #f0ede8
+--sf-text-2: #9ca3af
+--sf-text-3: #6b7280
+--sf-shadow-sm: 0 1px 3px rgba(0,0,0,0.4)
+--sf-shadow-md: 0 4px 12px rgba(0,0,0,0.5)
+(All accent colors remain the same in dark mode)
+
+Save preference to localStorage "sf_theme".
+
+RESPONSIVE BREAKPOINTS:
+- Desktop (>1024px): two-panel layout as designed
+- Tablet (768-1024px): sidebar collapses to a slide-out drawer, 
+  triggered by hamburger icon
+- Mobile (<768px): single column, sidebar is a bottom sheet, 
+  collection workspace stacks vertically
+
+Apply all changes globally. Do not break any existing functionality. 
+Test that every existing component renders correctly after the changes.
