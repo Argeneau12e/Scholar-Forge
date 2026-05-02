@@ -193,9 +193,11 @@ export function LitReviewComposer() {
   const [showStructurePicker, setShowStructurePicker] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
 
+  const [autoSaved, setAutoSaved] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
   const loadingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const discipline = config?.discipline ?? "general";
   const style = supervisorStyleKey(config?.citationStyle);
@@ -240,10 +242,22 @@ export function LitReviewComposer() {
     }
   }, []);
 
-  // Live word count from contenteditable
+  // Live word count + auto-save draft
+  const DRAFT_KEY = "sf_litreview_draft";
   const handleEditorInput = useCallback(() => {
     if (editorRef.current) {
       setLiveWordCount(countWords(editorRef.current.textContent ?? ""));
+      // Debounced auto-save (3 seconds after last keystroke)
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = setTimeout(() => {
+        if (editorRef.current) {
+          try {
+            localStorage.setItem(DRAFT_KEY, editorRef.current.innerHTML);
+            setAutoSaved(true);
+            setTimeout(() => setAutoSaved(false), 2500);
+          } catch { /* quota exceeded */ }
+        }
+      }, 3000);
     }
   }, []);
 
@@ -583,6 +597,12 @@ export function LitReviewComposer() {
         </Button>
 
         <div className="ml-auto flex items-center gap-2">
+          {autoSaved && (
+            <span className="text-[11px] text-emerald-600 flex items-center gap-1 animate-in fade-in">
+              <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+              Auto-saved
+            </span>
+          )}
           <span className="text-xs text-muted-foreground tabular-nums">
             {liveWordCount} words
           </span>

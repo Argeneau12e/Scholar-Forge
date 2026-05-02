@@ -237,6 +237,15 @@ export function useCollection() {
     setItems(next);
   }, []);
 
+  // ── restore (undo remove) ─────────────────────────────────────────────────
+  const restoreItem = useCallback((item: CollectionItem) => {
+    const current = readCollection();
+    if (current.some((c) => c.id === item.id)) return; // already back
+    const next = [item, ...current.map((c) => ({ ...c, order: c.order + 1 }))];
+    writeCollection(next);
+    setItems(next);
+  }, []);
+
   // ── all tags used across the collection ────────────────────────────────────
   const getAllTags = useCallback((): string[] => {
     const set = new Set<string>();
@@ -254,6 +263,7 @@ export function useCollection() {
     reorder,
     isInCollection,
     remove,
+    restoreItem,
     getAllTags,
   };
 }

@@ -31,9 +31,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ToastAction } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { useCollection, type CollectionItem } from "@/hooks/useCollection";
 import { useSupervisor } from "@/hooks/useSupervisor";
+import { useToast } from "@/hooks/use-toast";
 import { ParaphrasePanel } from "@/components/ParaphrasePanel";
 import { CitationDisplay } from "@/components/CitationDisplay";
 import { ExportModal } from "@/components/ExportModal";
@@ -358,15 +360,36 @@ function SortableCollectionCard({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function CollectionWorkspace() {
-  const { items, updateItem, reorder, remove, getAllTags } = useCollection();
+  const { items, updateItem, reorder, remove, restoreItem, getAllTags } = useCollection();
   const { config } = useSupervisor();
 
+  const { toast } = useToast();
   const [filterTags, setFilterTags] = useState<string[]>([]);
   const [filterCompliance, setFilterCompliance] = useState<FilterCompliance>("all");
   const [sortMode, setSortMode] = useState<SortMode>("date");
   const [exportOpen, setExportOpen] = useState(false);
   const [paraphraseTarget, setParaphraseTarget] = useState<CollectionItem | null>(null);
   const [citeTarget, setCiteTarget] = useState<CollectionItem | null>(null);
+
+  const handleRemove = (id: string) => {
+    const target = items.find((i) => i.id === id);
+    remove(id);
+    if (target) {
+      const shortTitle = target.title.length > 45
+        ? target.title.slice(0, 45) + "…"
+        : target.title;
+      toast({
+        title: `"${shortTitle}" removed`,
+        description: "It's gone — but you can undo right now.",
+        action: (
+          <ToastAction altText="Undo remove" onClick={() => restoreItem(target)}>
+            Undo
+          </ToastAction>
+        ),
+        duration: 7000,
+      });
+    }
+  };
 
   const allTags = getAllTags();
   const yearFrom = config?.yearFrom;
@@ -571,7 +594,7 @@ export function CollectionWorkspace() {
                 yearFrom={yearFrom}
                 yearTo={yearTo}
                 onUpdate={updateItem}
-                onRemove={remove}
+                onRemove={handleRemove}
                 onParaphrase={setParaphraseTarget}
                 onCite={setCiteTarget}
               />

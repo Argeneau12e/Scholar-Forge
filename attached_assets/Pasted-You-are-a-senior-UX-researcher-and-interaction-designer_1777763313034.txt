@@ -1,0 +1,153 @@
+You are a senior UX researcher and interaction designer. Perform a 
+comprehensive UX audit of the ScholarForge codebase. Your job is to 
+find every place where a real student user would get confused, 
+frustrated, stuck, or misled — and fix it.
+
+Think like a final-year biochemistry student using this app at 11pm 
+the night before their dissertation draft is due. They are stressed, 
+tired, and not technically savvy. Every friction point costs them.
+
+AUDIT SCOPE — check every one of these systematically:
+
+1. EMPTY AND LOADING STATES
+Scan every component for:
+- Any state where data is loading but no feedback is shown (blank 
+  screens, invisible spinners)
+- Any empty collection, empty search results, or zero-state screen 
+  that shows nothing or just a generic message
+- Any operation that takes >1 second with no progress indication
+
+Fix every instance:
+- Loading: descriptive text explaining what's happening + skeleton UI
+- Empty: illustrated empty state + specific call to action
+- Zero results: explain WHY and suggest next steps ("No PubMed results 
+  found. Try broadening your search or paste a snippet manually.")
+
+2. ERROR MESSAGES
+Find every error message in the codebase. For each one:
+- Is it written in plain English a student would understand?
+- Does it tell the user what to do next?
+- Does it offer an automatic fallback or alternative action?
+
+Rewrite every technical error message. Replace:
+- "Error 500" → "Something went wrong on our end. Try again in a moment."
+- "fetch failed" → "Couldn't reach PubMed. Check your connection or 
+  paste your snippet manually."
+- "Invalid JSON" → "The AI response was unexpected. Trying again..."
+- "undefined" anywhere in the UI → find the source and fix the data
+
+3. FORM VALIDATION AND FEEDBACK
+Check every form and input:
+- Is there inline validation (not just on submit)?
+- Are required fields marked clearly?
+- Are character limits shown before the user hits them?
+- Does the year range prevent yearFrom > yearTo?
+- Does the search button disable while a search is running?
+- Does the paraphrase button disable while Claude is thinking?
+- Is there a minimum character check before sending text to the API?
+  (Prevent single-word or empty submissions)
+
+Fix all gaps. Add:
+- Real-time validation with helpful inline messages
+- Disabled states on all buttons during async operations
+- Loading text on buttons ("Searching..." not just a spinner)
+
+4. NAVIGATION AND WAYFINDING
+- Can a new user understand what each section does in under 5 seconds?
+- Is the current location always clear (active nav state)?
+- Can a user always get back to where they were with one click?
+- Are the six main features (Search, Collection, Paraphrase, Gap Finder,
+  Lit Review, Writing Coach) all reachable from the top nav?
+- Is there a logical progression a first-time user would follow 
+  naturally without reading instructions?
+
+Fix any navigation that requires more than 2 clicks to reach any feature.
+Add breadcrumbs inside deep views (e.g. Collection > Paraphrase Mode).
+
+5. AFFORDANCES AND DISCOVERABILITY
+Check every interactive element:
+- Does every clickable thing look clickable?
+- Does every draggable thing have a visible drag handle?
+- Are tooltips shown on icon-only buttons (hover title attribute)?
+- Is the paraphrase slider labeled at each stop?
+- Is the intensity difference between slider stops explained?
+- Does the Gap Finder show the 8-snippet requirement BEFORE the user 
+  tries to click it (not after)?
+- Does the Argument Mapper show a minimum-items warning proactively?
+
+Fix all affordance gaps. Add:
+- Tooltip on every icon button (title + aria-label)
+- Descriptive labels at slider stops, not just left/right ends
+- Proactive unlock conditions shown with progress ("6/8 snippets — 
+  add 2 more to unlock Gap Finder")
+
+6. DATA PERSISTENCE AND SAFETY
+- What happens if the user accidentally refreshes mid-paraphrase?
+- What happens if they close the tab mid-lit-review generation?
+- Is the lit review draft auto-saved to localStorage as they edit?
+- Are snippet saves confirmed visually?
+- Is there an "undo" for removing a snippet from the collection?
+
+Fix all data loss risks:
+- Auto-save lit review draft to localStorage every 10 seconds
+- "Unsaved changes" warning if user tries to navigate away from 
+  the editor with changes
+- Soft-delete for collection items: removed items go to a 30-second 
+  undo buffer ("Removed. Undo?") before permanent deletion
+- Auto-save paraphrase results to the snippet in the collection
+
+7. MOBILE EXPERIENCE
+On a 375px viewport (iPhone SE):
+- Does the two-panel layout collapse correctly?
+- Is the search input and button accessible without horizontal scroll?
+- Are tap targets at least 44x44px?
+- Does the lit review editor work on mobile keyboard?
+- Are the collection drag handles usable on touch?
+
+Fix all mobile failures. Minimum tap target enforcement across all 
+interactive elements.
+
+8. ACCESSIBILITY
+- Do all images and icons have aria-labels or alt text?
+- Is the contrast ratio ≥ 4.5:1 for all text?
+- Can the entire app be navigated by keyboard alone?
+- Are form inputs associated with their labels via htmlFor/id pairs?
+- Do loading states announce themselves to screen readers via 
+  aria-live="polite"?
+- Is focus trapped correctly inside modals?
+- Does the Supervisor Setup modal have proper focus management?
+
+Fix all accessibility failures.
+
+9. COPY AND MICROCOPY AUDIT
+Read every string of text in the UI. Find and fix:
+- Any jargon a non-technical student might not understand
+- Any button label that doesn't clearly describe the action
+- Any placeholder text that's too generic ("Enter text here")
+- Any success message that doesn't confirm what specifically happened
+- Any heading that doesn't tell the user what the section does
+
+Rewrites to enforce:
+- Button labels must start with a verb: "Search papers", "Save snippet",
+  "Draft my review", "Find gaps"
+- Placeholders must be examples, not instructions: 
+  "e.g. amyloid-beta synaptic toxicity" not "Enter your topic"
+- Success toasts must be specific: "Snippet saved — 7 in your collection"
+  not "Saved successfully"
+
+10. PERFORMANCE PERCEPTION
+- Is there anything that makes the app feel slow even when it isn't?
+- Do search results appear incrementally or all at once after a long wait?
+- Does the lit review stream token by token (feels fast) or appear all 
+  at once after 8 seconds (feels broken)?
+
+Fix perception issues:
+- Stream Claude responses token by token using the Anthropic streaming 
+  API wherever the output is long (paraphraser, lit review, gap finder)
+- Show first PubMed results as soon as they arrive, not after all 
+  20 are fetched
+- Use optimistic UI updates for collection saves
+
+After identifying every issue, fix them all in the codebase directly. 
+Do not produce a report — produce the fixes. Then output a summary of 
+what was changed and why.

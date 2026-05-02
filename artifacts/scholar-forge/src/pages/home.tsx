@@ -308,8 +308,22 @@ function WorkspaceView() {
 
   if (isLoadingPapers || isLoadingStats) {
     return (
-      <div className="p-8 text-center text-muted-foreground">
-        Loading workspace…
+      <div className="max-w-5xl mx-auto space-y-4 p-8" aria-live="polite" aria-label="Loading workspace">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl border bg-card p-5 space-y-3">
+              <div className="h-3.5 rounded w-1/2 sf-shimmer" />
+              <div className="h-8 rounded w-1/3 sf-shimmer" />
+            </div>
+          ))}
+        </div>
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="rounded-xl border bg-card p-5 space-y-3">
+            <div className="h-5 rounded w-3/4 sf-shimmer" />
+            <div className="h-4 rounded w-1/2 sf-shimmer" />
+            <div className="h-3 rounded w-full sf-shimmer" />
+          </div>
+        ))}
       </div>
     );
   }
