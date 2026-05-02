@@ -1,5 +1,7 @@
 import { ReactNode } from "react";
 import { TopNav } from "./top-nav";
+import { SupervisorBar } from "./SupervisorBar";
+import { SupervisorSetupTrigger } from "./SupervisorSetup";
 
 interface LayoutProps {
   children: ReactNode;
@@ -8,8 +10,10 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background font-sans text-foreground">
+      <SupervisorSetupTrigger />
       <TopNav />
-      <div className="flex-1 flex overflow-hidden h-[calc(100vh-3.5rem)]">
+      <SupervisorBar />
+      <div className="flex-1 flex overflow-hidden">
         {children}
       </div>
     </div>

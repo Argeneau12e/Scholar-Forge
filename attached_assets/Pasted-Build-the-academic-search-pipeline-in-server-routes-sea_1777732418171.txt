@@ -1,0 +1,62 @@
+Build the academic search pipeline in /server/routes/search.js.
+
+Install: node-fetch, cheerio, xml2js
+
+POST /api/search accepts:
+{
+  topic: string,
+  phrase: string (optional — specific quote to find),
+  yearFrom: number,
+  yearTo: number,
+  source: 'pubmed' | 'semantic' | 'both' (default: 'both'),
+  page: number (default: 1)
+}
+
+PUBMED PIPELINE (/server/lib/pubmed.js):
+
+Step 1 — esearch:
+Fetch: https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi
+Params: db=pmc, term=[topic] AND [yearFrom:yearTo][pdat] AND 
+  "open access"[filter], retmax=20, retmode=json
+Extract: list of PMCIDs
+
+Step 2 — efetch for each PMCID (batch max 5 at a time):
+Fetch: https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi
+Params: db=pmc, id=[pmcid], rettype=xml, retmode=xml
+Parse XML with xml2js.
+Extract ONLY: abstract text, results section text, intro first paragraph.
+Do NOT return full paper text — this keeps responses fast.
+
+Step 3 — phrase matching:
+If phrase provided, score each extracted section by how many words from 
+the phrase appear in it. Return top 3 matching sections per paper as 
+"snippets".
+
+Step 4 — build result objects:
+{
+  pmcid: string,
+  title: string,
+  authors: string[] (last names only, max 3, then "et al."),
+  year: number,
+  journal: string,
+  doi: string (if available),
+  abstract: string (first 300 chars),
+  snippets: [{ text: string, section: string, matchScore: number }],
+  openAccess: true,
+  url: "https://www.ncbi.nlm.nih.gov/pmc/articles/[pmcid]/"
+}
+
+SEMANTIC SCHOLAR PIPELINE (/server/lib/semantic.js):
+Fetch: https://api.semanticscholar.org/graph/v1/paper/search
+Params: query=[topic], fields=title,authors,year,journal,externalIds,
+  abstract,openAccessPdf, limit=10
+Filter by year range client-side.
+Return same result object shape as PubMed (no snippets — abstract only).
+
+COMBINED RESPONSE:
+Merge both sources, deduplicate by DOI if available.
+Sort by relevance (phrase match score desc, then year desc).
+Return { results: [...], total: number, sources: ['pubmed','semantic'] }
+
+Add 2-second server-side cache per query using a simple Map object.
+Add rate limiting: 30 requests per IP per hour on this route.
