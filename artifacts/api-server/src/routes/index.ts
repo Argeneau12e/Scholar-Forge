@@ -5,6 +5,7 @@ import searchRouter from "./search";
 import workspaceRouter from "./workspace";
 import paraphraseRouter from "./paraphrase";
 import similarityRouter from "./similarity";
+import citeRouter from "./cite";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(searchRouter);
 router.use(workspaceRouter);
 router.use(paraphraseRouter);
 router.use(similarityRouter);
+router.use(citeRouter);
 
 export default router;

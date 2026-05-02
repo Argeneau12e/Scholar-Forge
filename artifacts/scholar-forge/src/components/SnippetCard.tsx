@@ -7,6 +7,7 @@ import {
   BookmarkCheck,
   Sparkles,
   AlertTriangle,
+  Quote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useCollection } from "@/hooks/useCollection";
 import { ParaphrasePanel } from "@/components/ParaphrasePanel";
+import { CitationDisplay } from "@/components/CitationDisplay";
 import type { Paper } from "@workspace/api-client-react/src/generated/api.schemas";
 import type { SupervisorConfig } from "@/hooks/useSupervisor";
 

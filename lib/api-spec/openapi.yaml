@@ -232,6 +232,56 @@ paths:
         "503":
           description: AI not configured
 
+  /cite:
+    post:
+      operationId: formatCitation
+      tags: [search]
+      summary: Format a citation in all styles, optionally fetching metadata from CrossRef
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CiteBody"
+      responses:
+        "200":
+          description: Formatted citations in all styles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CiteResponse"
+        "400":
+          description: Invalid input
+        "502":
+          description: CrossRef lookup failed
+
+  /cite/batch:
+    get:
+      operationId: batchCite
+      tags: [search]
+      summary: Format multiple citations by DOI
+      parameters:
+        - name: dois
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+        - name: style
+          in: query
+          schema:
+            type: string
+            enum: [apa, vancouver, harvard, mla, chicago]
+      responses:
+        "200":
+          description: Batch formatted citations
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchCiteResponse"
+
   /workspace:
     get:
       operationId: getWorkspace
