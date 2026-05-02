@@ -21,6 +21,8 @@ import type {
   AddToWorkspaceBody,
   CreateSupervisorBody,
   HealthStatus,
+  ParaphraseBody,
+  ParaphraseResponse,
   SearchPapersBody,
   SearchPapersResponse,
   SearchRecord,
@@ -854,6 +856,92 @@ export function useGetSearchHistory<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary AI-powered paraphrase of a snippet
+ */
+export const getParaphraseTextUrl = () => {
+  return `/api/paraphrase`;
+};
+
+export const paraphraseText = async (
+  paraphraseBody: ParaphraseBody,
+  options?: RequestInit,
+): Promise<ParaphraseResponse> => {
+  return customFetch<ParaphraseResponse>(getParaphraseTextUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(paraphraseBody),
+  });
+};
+
+export const getParaphraseTextMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof paraphraseText>>,
+    TError,
+    { data: BodyType<ParaphraseBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof paraphraseText>>,
+  TError,
+  { data: BodyType<ParaphraseBody> },
+  TContext
+> => {
+  const mutationKey = ["paraphraseText"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof paraphraseText>>,
+    { data: BodyType<ParaphraseBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return paraphraseText(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ParaphraseTextMutationResult = NonNullable<
+  Awaited<ReturnType<typeof paraphraseText>>
+>;
+export type ParaphraseTextMutationBody = BodyType<ParaphraseBody>;
+export type ParaphraseTextMutationError = ErrorType<void>;
+
+/**
+ * @summary AI-powered paraphrase of a snippet
+ */
+export const useParaphraseText = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof paraphraseText>>,
+    TError,
+    { data: BodyType<ParaphraseBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof paraphraseText>>,
+  TError,
+  { data: BodyType<ParaphraseBody> },
+  TContext
+> => {
+  return useMutation(getParaphraseTextMutationOptions(options));
+};
 
 /**
  * @summary Get all papers in the workspace

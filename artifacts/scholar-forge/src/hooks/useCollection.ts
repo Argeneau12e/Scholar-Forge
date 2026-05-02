@@ -16,6 +16,9 @@ export interface CollectionItem {
   source?: string | null;
   snippets?: PaperSnippet[];
   rawText?: string;
+  paraphrasedText?: string;
+  citationInline?: string;
+  kind?: "paper" | "paste" | "paraphrase";
   savedAt: string;
 }
 
@@ -43,6 +46,7 @@ export function useCollection() {
 
       const item: CollectionItem = {
         id: paper.id,
+        kind: "paper",
         title: paper.title,
         authors: paper.authors,
         year: paper.year,
@@ -66,11 +70,12 @@ export function useCollection() {
 
   const addRawSnippet = useCallback(
     (rawText: string, doi: string): { added: boolean; total: number } => {
-      if (!rawText.trim()) return { added: false, total: items.length };
+      if (!rawText.trim()) return { added: false, total: readCollection().length };
       const current = readCollection();
       const id = `paste_${Date.now()}`;
       const item: CollectionItem = {
         id,
+        kind: "paste",
         title: doi.trim() ? `DOI: ${doi.trim()}` : "Pasted snippet",
         authors: [],
         doi: doi.trim() || null,
@@ -82,7 +87,37 @@ export function useCollection() {
       setItems(next);
       return { added: true, total: next.length };
     },
-    [items.length]
+    []
+  );
+
+  const addParaphrase = useCallback(
+    (
+      paraphrasedText: string,
+      citationInline: string,
+      paper: Paper
+    ): { added: boolean; total: number } => {
+      if (!paraphrasedText.trim()) return { added: false, total: readCollection().length };
+      const current = readCollection();
+      const id = `paraphrase_${paper.id}_${Date.now()}`;
+      const item: CollectionItem = {
+        id,
+        kind: "paraphrase",
+        title: paper.title,
+        authors: paper.authors,
+        year: paper.year,
+        venue: paper.venue,
+        url: paper.url,
+        doi: paper.doi,
+        paraphrasedText: paraphrasedText.trim(),
+        citationInline,
+        savedAt: new Date().toISOString(),
+      };
+      const next = [item, ...current];
+      writeCollection(next);
+      setItems(next);
+      return { added: true, total: next.length };
+    },
+    []
   );
 
   const isInCollection = useCallback(
@@ -96,5 +131,5 @@ export function useCollection() {
     setItems(current);
   }, []);
 
-  return { items, addFromPaper, addRawSnippet, isInCollection, remove };
+  return { items, addFromPaper, addRawSnippet, addParaphrase, isInCollection, remove };
 }

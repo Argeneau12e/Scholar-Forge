@@ -131,6 +131,35 @@ export interface SearchPapersResponse {
   semanticRateLimited: boolean;
 }
 
+export interface ParaphraseCitation {
+  authors?: string;
+  year?: number | string;
+  journal?: string;
+  doi?: string;
+}
+
+export type ParaphraseBodyIntensity =
+  (typeof ParaphraseBodyIntensity)[keyof typeof ParaphraseBodyIntensity];
+
+export const ParaphraseBodyIntensity = {
+  literal: "literal",
+  moderate: "moderate",
+  student: "student",
+} as const;
+
+export interface ParaphraseBody {
+  /** The snippet text to paraphrase */
+  text: string;
+  intensity: ParaphraseBodyIntensity;
+  discipline?: string;
+  citation?: ParaphraseCitation;
+}
+
+export interface ParaphraseResponse {
+  paraphrase: string;
+  citationInline: string;
+}
+
 export interface SearchRecord {
   id: number;
   query: string;

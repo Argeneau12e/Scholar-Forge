@@ -188,6 +188,27 @@ paths:
                 items:
                   $ref: "#/components/schemas/SearchRecord"
 
+  /paraphrase:
+    post:
+      operationId: paraphraseText
+      tags: [search]
+      summary: AI-powered paraphrase of a snippet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ParaphraseBody"
+      responses:
+        "200":
+          description: Paraphrased text with inline citation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParaphraseResponse"
+        "503":
+          description: AI not configured
+
   /workspace:
     get:
       operationId: getWorkspace
@@ -478,6 +499,49 @@ components:
         - query
         - sources
         - semanticRateLimited
+
+    ParaphraseCitation:
+      type: object
+      properties:
+        authors:
+          type: string
+        year:
+          oneOf:
+            - type: integer
+            - type: string
+        journal:
+          type: string
+        doi:
+          type: string
+
+    ParaphraseBody:
+      type: object
+      properties:
+        text:
+          type: string
+          description: The snippet text to paraphrase
+        intensity:
+          type: string
+          enum: [literal, moderate, student]
+        discipline:
+          type: string
+          default: general
+        citation:
+          $ref: "#/components/schemas/ParaphraseCitation"
+      required:
+        - text
+        - intensity
+
+    ParaphraseResponse:
+      type: object
+      properties:
+        paraphrase:
+          type: string
+        citationInline:
+          type: string
+      required:
+        - paraphrase
+        - citationInline
 
     SearchRecord:
       type: object

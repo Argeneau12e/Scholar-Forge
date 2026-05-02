@@ -215,6 +215,30 @@ export const GetSearchHistoryResponseItem = zod.object({
 export const GetSearchHistoryResponse = zod.array(GetSearchHistoryResponseItem);
 
 /**
+ * @summary AI-powered paraphrase of a snippet
+ */
+export const paraphraseTextBodyDisciplineDefault = `general`;
+
+export const ParaphraseTextBody = zod.object({
+  text: zod.string().describe("The snippet text to paraphrase"),
+  intensity: zod.enum(["literal", "moderate", "student"]),
+  discipline: zod.string().default(paraphraseTextBodyDisciplineDefault),
+  citation: zod
+    .object({
+      authors: zod.string().optional(),
+      year: zod.union([zod.number(), zod.string()]).optional(),
+      journal: zod.string().optional(),
+      doi: zod.string().optional(),
+    })
+    .optional(),
+});
+
+export const ParaphraseTextResponse = zod.object({
+  paraphrase: zod.string(),
+  citationInline: zod.string(),
+});
+
+/**
  * @summary Get all papers in the workspace
  */
 export const GetWorkspaceResponseItem = zod.object({

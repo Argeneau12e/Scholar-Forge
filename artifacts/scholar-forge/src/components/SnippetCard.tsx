@@ -1,11 +1,19 @@
 import { useState } from "react";
-import { ExternalLink, ChevronDown, ChevronUp, BookmarkPlus, BookmarkCheck, Sparkles, Copy, Check, AlertTriangle } from "lucide-react";
+import {
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  BookmarkPlus,
+  BookmarkCheck,
+  Sparkles,
+  AlertTriangle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useCollection } from "@/hooks/useCollection";
+import { ParaphrasePanel } from "@/components/ParaphrasePanel";
 import type { Paper } from "@workspace/api-client-react/src/generated/api.schemas";
 import type { SupervisorConfig } from "@/hooks/useSupervisor";
 
@@ -15,7 +23,7 @@ interface SnippetCardProps {
   supervisorConfig: SupervisorConfig | null;
 }
 
-// ─── Phrase highlight helper ────────────────────────────────────────────────
+// ─── Phrase highlight helper ─────────────────────────────────────────────────
 function highlightText(text: string, phrase: string): React.ReactNode {
   if (!phrase.trim()) return text;
 
@@ -67,10 +75,8 @@ function getCompliance(
 
   const { yearFrom, yearTo, preferredJournals } = config;
   const year = paper.year;
-
-  const yearInRange =
-    year != null && year >= yearFrom && year <= yearTo;
   const yearKnown = year != null;
+  const yearInRange = yearKnown && year >= yearFrom && year <= yearTo;
 
   if (yearKnown && !yearInRange) {
     return {
@@ -94,36 +100,33 @@ function getCompliance(
     venueNorm.includes(j.toLowerCase())
   );
 
-  if (journalMatch) {
-    return {
-      level: "green",
-      label: "Preferred journal · year in range",
-      outsideRange: false,
-    };
-  }
-
-  return {
-    level: "yellow",
-    label: "Year in range · journal not in preferred list",
-    outsideRange: false,
-  };
+  return journalMatch
+    ? { level: "green", label: "Preferred journal · year in range", outsideRange: false }
+    : { level: "yellow", label: "Year in range · journal not in preferred list", outsideRange: false };
 }
 
-// ─── Dot indicator ──────────────────────────────────────────────────────────
-function ComplianceDot({ level, label }: { level: ComplianceLevel; label: string }) {
+function ComplianceDot({
+  level,
+  label,
+}: {
+  level: ComplianceLevel;
+  label: string;
+}) {
   const colors: Record<ComplianceLevel, string> = {
     green: "bg-emerald-500",
     yellow: "bg-amber-400",
     red: "bg-red-500",
   };
-
   return (
     <span
       className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
       title={label}
     >
       <span
-        className={cn("inline-block h-2 w-2 rounded-full shrink-0", colors[level])}
+        className={cn(
+          "inline-block h-2 w-2 rounded-full shrink-0",
+          colors[level]
+        )}
       />
       {label}
     </span>
@@ -131,17 +134,21 @@ function ComplianceDot({ level, label }: { level: ComplianceLevel; label: string
 }
 
 // ─── Main card ───────────────────────────────────────────────────────────────
-export function SnippetCard({ paper, searchPhrase = "", supervisorConfig }: SnippetCardProps) {
+export function SnippetCard({
+  paper,
+  searchPhrase = "",
+  supervisorConfig,
+}: SnippetCardProps) {
   const { toast } = useToast();
   const { addFromPaper, isInCollection } = useCollection();
 
   const [abstractExpanded, setAbstractExpanded] = useState(false);
   const [paraphraseOpen, setParaphraseOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const saved = isInCollection(paper.id);
   const compliance = getCompliance(paper, supervisorConfig);
 
+  // Pick the best text to send to the paraphrase panel
   const paraphraseText =
     paper.snippets && paper.snippets.length > 0
       ? paper.snippets[0].text
@@ -152,14 +159,8 @@ export function SnippetCard({ paper, searchPhrase = "", supervisorConfig }: Snip
     if (added) {
       toast({ title: `Added to your collection (${total} total)` });
     } else {
-      toast({ title: "Already in your collection", variant: "default" });
+      toast({ title: "Already in your collection" });
     }
-  };
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(paraphraseText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
@@ -171,18 +172,18 @@ export function SnippetCard({ paper, searchPhrase = "", supervisorConfig }: Snip
         )}
         data-testid={`snippet-card-${paper.id}`}
       >
-        {/* ── Outside-range banner ── */}
+        {/* Outside-range banner */}
         {compliance.outsideRange && (
           <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-            Outside your {supervisorConfig?.yearFrom}–{supervisorConfig?.yearTo} window
+            Outside your {supervisorConfig?.yearFrom}–{supervisorConfig?.yearTo}{" "}
+            window
           </div>
         )}
 
-        {/* ── Title row ── */}
+        {/* Title + badges */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1.5 flex-1">
-            {/* Title */}
             {paper.url ? (
               <a
                 href={paper.url}
@@ -204,7 +205,6 @@ export function SnippetCard({ paper, searchPhrase = "", supervisorConfig }: Snip
               </p>
             )}
 
-            {/* Authors · Year · Journal */}
             <p className="text-[13px] text-muted-foreground leading-tight">
               {paper.authors.slice(0, 3).join(", ")}
               {paper.authors.length > 3 ? " et al." : ""}
@@ -221,7 +221,6 @@ export function SnippetCard({ paper, searchPhrase = "", supervisorConfig }: Snip
             </p>
           </div>
 
-          {/* Badges column */}
           <div className="flex flex-col items-end gap-1.5 shrink-0">
             {paper.openAccess === true ? (
               <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-medium hover:bg-emerald-50">
@@ -233,7 +232,6 @@ export function SnippetCard({ paper, searchPhrase = "", supervisorConfig }: Snip
               </Badge>
             ) : null}
 
-            {/* Source badge */}
             {paper.source === "pubmed" ? (
               <Badge
                 variant="outline"
@@ -252,10 +250,10 @@ export function SnippetCard({ paper, searchPhrase = "", supervisorConfig }: Snip
           </div>
         </div>
 
-        {/* ── Compliance indicator ── */}
+        {/* Compliance indicator */}
         <ComplianceDot level={compliance.level} label={compliance.label} />
 
-        {/* ── Abstract (expandable) ── */}
+        {/* Abstract (expandable) */}
         {paper.abstract && (
           <div>
             <p
@@ -285,7 +283,7 @@ export function SnippetCard({ paper, searchPhrase = "", supervisorConfig }: Snip
           </div>
         )}
 
-        {/* ── Matched snippets ── */}
+        {/* Matched snippets with highlighted phrase */}
         {paper.snippets && paper.snippets.length > 0 && (
           <div className="space-y-2">
             {paper.snippets.map((sn, i) => (
@@ -310,12 +308,13 @@ export function SnippetCard({ paper, searchPhrase = "", supervisorConfig }: Snip
           </div>
         )}
 
-        {/* ── Action buttons ── */}
+        {/* Action buttons */}
         <div className="flex items-center gap-2 pt-1">
           <Button
             size="sm"
             className="bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5"
             onClick={() => setParaphraseOpen(true)}
+            disabled={!paraphraseText}
             data-testid={`btn-paraphrase-${paper.id}`}
           >
             <Sparkles className="h-3.5 w-3.5" />
@@ -348,52 +347,13 @@ export function SnippetCard({ paper, searchPhrase = "", supervisorConfig }: Snip
         </div>
       </article>
 
-      {/* ── Paraphrase dialog ── */}
-      <Dialog open={paraphraseOpen} onOpenChange={setParaphraseOpen}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="font-serif flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-emerald-700" />
-              Paraphrase this passage
-            </DialogTitle>
-            <DialogDescription>
-              Copy the text below into your preferred AI writing tool to
-              paraphrase it in your own words.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            <div className="rounded-lg bg-muted/50 border border-border p-4 text-sm text-foreground leading-relaxed max-h-60 overflow-y-auto">
-              {paraphraseText}
-            </div>
-
-            <div className="flex justify-between items-center">
-              <p className="text-xs text-muted-foreground">
-                Tip: paste into ChatGPT, Claude, or Gemini with "Paraphrase this
-                in academic style"
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleCopy}
-                className="gap-1.5 shrink-0"
-              >
-                {copied ? (
-                  <>
-                    <Check className="h-3.5 w-3.5 text-emerald-600" />
-                    Copied!
-                  </>
-                ) : (
-                  <>
-                    <Copy className="h-3.5 w-3.5" />
-                    Copy text
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Paraphrase panel */}
+      <ParaphrasePanel
+        paper={paper}
+        text={paraphraseText}
+        open={paraphraseOpen}
+        onOpenChange={setParaphraseOpen}
+      />
     </>
   );
 }
