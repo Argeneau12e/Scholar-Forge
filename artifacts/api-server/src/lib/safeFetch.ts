@@ -11,9 +11,11 @@ const ALLOWED_DOMAINS = new Set([
   "api.openalex.org",
   "export.arxiv.org",
   "api.europepmc.org",
+  "www.ebi.ac.uk",
   "doaj.org",
   "api.core.ac.uk",
   "api.unpaywall.org",
+  "api.base-search.net",
 ]);
 
 const PRIVATE_IP_RE =

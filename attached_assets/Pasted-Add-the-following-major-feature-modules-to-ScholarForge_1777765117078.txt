@@ -1,0 +1,281 @@
+Add the following major feature modules to ScholarForge. These are 
+the features that make paid academic tools worth $100+/year — 
+ScholarForge provides them all free.
+
+MODULE A: SMART QUESTION ANSWERING (like Consensus)
+Create /client/src/components/ResearchQuestion.jsx
+Create /server/routes/question.js
+
+The user types a research question in natural language:
+"Do statins reduce cardiovascular mortality in diabetic patients?"
+
+System:
+1. Parses the question into a structured query
+2. Searches OpenAlex + PubMed for the 10 most relevant recent papers
+3. For each paper, Claude extracts whether the paper supports, 
+   contradicts, or is neutral on the question
+4. Aggregates into a verdict: "8 of 10 studies support this claim"
+5. Shows a visual meter: [=======>  ] 80% support
+6. Lists each paper with its stance and the specific finding
+
+Claude prompt for stance detection:
+"Does this paper's findings support, contradict, or take a neutral 
+position on this question: [question]?
+
+Paper abstract: [abstract]
+
+Return only JSON: {
+  stance: 'supports' | 'contradicts' | 'neutral' | 'insufficient_data',
+  confidence: 'high' | 'medium' | 'low',
+  keyFinding: string (one sentence, the specific finding relevant 
+    to the question)
+}"
+
+UI: Question input at top, verdict banner, stance breakdown chart 
+(donut: green=support, red=contradict, gray=neutral), paper cards 
+sorted by stance with color-coded left borders.
+
+MODULE B: CONNECTED PAPERS GRAPH (like Connected Papers + Litmaps)
+Create /client/src/components/PaperGraph.jsx
+Create /server/routes/papergraph.js
+
+POST /api/papergraph accepts: { doi: string } or { title: string }
+
+Pipeline:
+1. Look up the seed paper in OpenAlex to get its referenced_works 
+   and related_works arrays
+2. Fetch metadata for up to 30 of those papers from OpenAlex
+3. For each neighbor paper, also get its top 10 cited papers
+4. Build a graph: nodes = papers, edges = citation relationships
+5. Compute node size from cited_by_count (more cited = bigger node)
+6. Compute temporal position: x-axis = year, y-axis = citation count
+
+Render using D3 force simulation:
+- Seed paper: large gold star node at center
+- Direct references: medium nodes, connected to seed
+- Co-citations (papers that cite the same papers): 
+  cluster near each other
+- Node color: by decade of publication (gradient blue=old, green=recent)
+- Node size: proportional to log(citedByCount + 1)
+- Edge opacity: proportional to citation relationship strength
+
+Interactions:
+- Click any node: shows paper card (title, authors, year, abstract, 
+  open access link, "Add to collection" button)
+- Double-click: makes that paper the new seed and re-renders graph
+- Hover edge: shows relationship type (cites / cited-by / co-citation)
+- Time slider: filter to show only papers from selected year range
+- "Add all visible papers to collection" button
+- Export graph as PNG
+
+Add "Connected Papers" button to every SnippetCard and search result.
+
+MODULE C: CITATION CONTEXT CHECKER (like Scite)
+Create /server/routes/citecontext.js
+
+POST /api/citecontext accepts:
+{ citing_paper_doi: string, cited_paper_doi: string }
+
+Uses OpenAlex to find papers that cite the target paper.
+For each citing paper, fetches abstract and asks Claude:
+"In this abstract, how is [cited paper title] cited? Does the 
+abstract indicate it supports, contradicts, or merely mentions 
+the cited work? Return JSON: { context: string, type: 'supporting' 
+| 'contrasting' | 'mentioning' }"
+
+Returns: how a specific paper is cited across the literature — 
+whether other researchers find it supportive or controversial.
+
+UI: Added as a "How is this paper cited?" button on every snippet card.
+Shows a breakdown: "Cited 47 times — 31 supporting, 8 contrasting, 
+8 mentioning" with example citation contexts.
+
+MODULE D: OUTLINE EDITOR + INTELLIGENT RESOURCE MATCHING
+Create /client/src/components/OutlineEditor.jsx
+Create /server/routes/outline.js
+
+The user enters their dissertation outline. This can be:
+- A rough bullet list ("1. Introduction 2. Literature Review 3. Methods")
+- A detailed hierarchical outline with subpoints
+- A free-text description of their chapters
+
+POST /api/outline/analyze accepts:
+{ outline: string, topic: string, discipline: string, 
+  wordTarget: number, supervisorConfig: object }
+
+Claude analysis prompt:
+"You are an experienced dissertation supervisor reviewing a student's 
+outline for a [discipline] dissertation on [topic].
+
+Outline:
+[outline]
+
+Analyze and return JSON:
+{
+  overallFeedback: string (2-3 sentences, constructive),
+  structureScore: number (1-10),
+  issues: [{
+    section: string,
+    type: 'missing_section' | 'wrong_order' | 'too_broad' | 
+      'too_narrow' | 'no_methodology' | 'weak_conclusion' | 
+      'citation_heavy_without_analysis',
+    description: string,
+    fix: string
+  }],
+  suggestedRevision: string (revised outline in the same format),
+  sectionsNeedingMoreSources: string[],
+  recommendedWordDistribution: {[section]: number},
+  missingEssentialSections: string[]
+}"
+
+POST /api/outline/resources accepts:
+{ outline: string, topic: string, discipline: string }
+
+For each section of the outline, search OpenAlex and PubMed for 
+5 highly-cited, relevant papers.
+Return: { [sectionName]: SearchResult[] }
+
+UI Layout:
+- Left panel: outline text editor (contenteditable, with markdown-
+  style bullet support)
+- Center: feedback panel with score, issues list, suggested revision
+- Right panel: recommended papers per section (auto-populated)
+- "Accept suggested revision" button replaces their outline with 
+  Claude's improved version
+- "Search resources for this section" button on each outline item
+- Word distribution chart: horizontal bar showing recommended 
+  word counts per section
+
+MODULE E: LIVE ACADEMIC WRITING ENVIRONMENT (like Notion + Zotero)
+Create /client/src/pages/WritingStudio.jsx — a full-page writing 
+environment.
+
+This is ScholarForge's flagship feature. A student should be able 
+to write their entire dissertation inside ScholarForge.
+
+EDITOR:
+- Rich text editor using Tiptap (install @tiptap/react, 
+  @tiptap/starter-kit, @tiptap/extension-placeholder)
+- Autosave to localStorage every 15 seconds, with "Last saved X 
+  seconds ago" indicator
+- Word count, sentence count, paragraph count in bottom status bar
+- Reading time estimate ("~12 min read")
+- Document structure in left sidebar: headings extracted from the 
+  document, clickable for navigation
+
+CITATION INSERTION:
+- Type @ anywhere in the document to trigger a citation picker
+- Citation picker: search box that searches the user's saved 
+  collection AND runs a live OpenAlex search
+- Select a paper: inserts inline citation in the supervisor's style
+  e.g. (Dawson et al., 2022) or [14] for Vancouver
+- The cited paper is automatically added to the bibliography
+
+AUTO-BIBLIOGRAPHY:
+- Right panel (collapsible): "Bibliography" — live list of all cited 
+  papers in document order
+- Automatically sorted alphabetically by first author surname
+- Formatted in the supervisor's chosen citation style
+- Updates in real time as citations are inserted or deleted
+- If a citation is deleted from the text, paper is removed from 
+  bibliography (with undo toast: "Removed Smith et al. from 
+  bibliography. Undo?")
+- Export bibliography as .docx, .bib, .txt at any time
+
+INLINE AI ASSISTANCE:
+- Select any text → right-click menu shows:
+  - "Improve this sentence" → Writing Coach rewrite
+  - "Find a citation for this claim" → searches for supporting paper
+  - "Check paraphrasing" → Originality Check on selection
+  - "Simplify language" → Jargon clarity rewrite
+- Highlight a sentence and press Cmd+K → command palette:
+  - "Make more academic" / "Add transition" / "Add hedge phrase" / 
+    "Add citation" / "Expand this point"
+
+DISTRACTION-FREE MODE:
+- F11 or toggle button: hides all panels, shows only the writing 
+  surface at 700px max-width, centered, white background
+- Ambient word count goal: set a daily target (e.g. 500 words), 
+  progress bar appears at bottom, turns green on completion
+
+REVISION HISTORY:
+- Every 30 minutes, save a snapshot to localStorage with timestamp
+- "Version history" panel shows timeline of snapshots
+- Click any snapshot to preview it, click "Restore" to roll back
+- Keep last 20 snapshots
+
+MODULE F: SMART JOURNAL RECOMMENDER
+Create /server/routes/journals.js
+Create /client/src/components/JournalRecommender.jsx
+
+POST /api/journals/recommend accepts:
+{ abstract: string, topic: string, discipline: string }
+
+Uses DOAJ API + OpenAlex concepts to recommend:
+- Top 5 journals most likely to accept this type of work
+- For each journal: impact factor (if available), open access status, 
+  typical review time, submission guidelines URL, ISSN
+- Fit score: how well the abstract matches papers previously published 
+  in that journal (via OpenAlex concept matching)
+
+Also: manuscript formatting requirements — does this journal use 
+Vancouver? APA? What word limit? Automatically update the supervisor 
+config if the user selects a target journal.
+
+MODULE G: DAILY RESEARCH DIGEST
+Create /server/routes/digest.js
+
+POST /api/digest accepts:
+{ topics: string[], yearFrom: number, discipline: string }
+
+Every time the user opens ScholarForge, if it has been >24 hours 
+since last digest:
+- Search OpenAlex for papers published in the last 7 days matching 
+  their saved research topics
+- Filter to open-access only
+- Claude summarizes the top 5 in 2 sentences each
+- Show as a "New this week" banner on the home screen with dismiss option
+- Each paper has "Add to collection" button
+
+Store last digest timestamp in localStorage. 
+Only re-fetch if timestamp is >24 hours old.
+
+MODULE H: METHODOLOGY ADVISOR
+Create /server/routes/methodology.js
+
+POST /api/methodology accepts:
+{ topic: string, researchQuestion: string, discipline: string }
+
+Claude prompt:
+"A student in [discipline] is researching '[topic]' with the 
+research question: '[question]'.
+
+Recommend appropriate research methodologies. Return JSON:
+{
+  recommended: [{
+    name: string,
+    type: 'quantitative' | 'qualitative' | 'mixed',
+    suitability: 'high' | 'medium' | 'low',
+    rationale: string (2 sentences),
+    commonPitfalls: string[],
+    keyPapers: string[] (methodology papers to cite — search for real ones)
+  }],
+  notRecommended: [{ name: string, reason: string }],
+  ethicsConsiderations: string[],
+  dataCollectionSuggestions: string[]
+}"
+
+After getting Claude's response, search OpenAlex for real methodology 
+papers to cite for each recommended approach.
+
+UI: shown as a panel in the Outline Editor, accessed via "Get 
+methodology recommendations" button.
+
+After implementing all modules, add them to the navigation:
+Main nav tabs: Write | Search | Collection | Analyse | Tools
+
+Under Analyse: Gap Finder, Argument Mapper, Question Answering, 
+  Connected Papers, Citation Context
+Under Tools: Outline Editor, Writing Coach, Plagiarism Check, 
+  Journal Recommender, Methodology Advisor
+Under Write: Writing Studio (full page)

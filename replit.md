@@ -47,6 +47,47 @@ All 10 security items from the spec are implemented:
 - **Lit review integrity banner** (`LitReviewComposer.tsx`) — non-dismissable amber `border-l-4` banner above the editor in the result step
 - **Export citations checkbox** (`ExportModal.tsx`) — "I have independently verified..." checkbox; inline orange warning when unchecked
 
+## Multi-Source Search (8 Academic Databases)
+
+The search backend now fans out to 8 sources simultaneously via a unified orchestrator.
+
+### New source libraries (`artifacts/api-server/src/lib/`)
+
+| File | Source | API | Key needed |
+|---|---|---|---|
+| `openalex.ts` | OpenAlex | `api.openalex.org` | No (polite pool, mailto param) |
+| `europepmc.ts` | Europe PMC | `www.ebi.ac.uk/europepmc/webservices/rest` | No |
+| `core.ts` | CORE | `api.core.ac.uk/v3` | Yes (`CORE_API_KEY` env var) |
+| `arxiv.ts` | arXiv | `export.arxiv.org/api` | No (XML/Atom parsed with xml2js) |
+| `unpaywall.ts` | Unpaywall | `api.unpaywall.org/v2` | No (email param) |
+| `doaj.ts` | DOAJ | `doaj.org/api` | No |
+| `base.ts` | BASE | `api.base-search.net` | No |
+
+All existing `pubmed.ts` and `semantic.ts` sources retained.
+
+### Updated search route (`artifacts/api-server/src/routes/search.ts`)
+- Reads `sources: string[]` from the request body (alongside the legacy `source` field)
+- Fans out to all requested sources via `Promise.all` — each source `.catch(() => [])` so one failure never blocks others
+- Deduplicates by DOI first, then by normalized title (lowercase, alphanumeric only, first 60 chars)
+- Enriches all results with Unpaywall free PDF links (batch lookup, race-safe)
+- Sorts: snippet match score → citation count → recency
+- `UnifiedPaper` now includes `freePdfUrl: string | null` and `isPreprint: boolean`
+- safeFetch whitelist updated with `www.ebi.ac.uk` and `api.base-search.net`
+
+### Updated frontend
+
+**`SearchPanel.tsx`** — multi-select chip group
+- 8 source chips: OpenAlex + PubMed pre-selected by default
+- Hover tooltip on each chip explains what it covers
+- "Best for my discipline" button (visible when supervisor has focus areas set): auto-selects sources by keyword-matching the supervisor's focus areas (biomedical → PubMed + Europe PMC; CS/physics → arXiv + Semantic Scholar; humanities → CORE + BASE + DOAJ; otherwise OpenAlex + PubMed)
+- Must always have ≥1 source selected (last chip toggle is a no-op)
+- `PanelSearchParams.source` replaced by `sources: string[]`
+
+**`SnippetCard.tsx`** — extended paper card
+- `SourceBadge` component: color-coded badge per source (PMC=blue, S2=violet, OpenAlex=emerald, Europe PMC=cyan, CORE=amber, arXiv=red, DOAJ=pink, BASE=indigo)
+- Preprint badge (orange) shown when `paper.isPreprint === true`
+- "Free PDF ↗" link shown when `paper.freePdfUrl` is populated
+
 ## Originality Check Feature (`/originality`)
 
 Three-layer plagiarism detection page added to the main navigation.

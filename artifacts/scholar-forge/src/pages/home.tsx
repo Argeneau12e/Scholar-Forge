@@ -74,15 +74,16 @@ export default function Home() {
     setSearchPhrase(params.phrase);
     setSearchError(null);
     searchMutation.mutate({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       data: {
         query: params.topic,
         topic: params.topic,
         phrase: params.phrase || null,
-        source: params.source === "both" ? "both" : params.source,
         yearFrom: params.yearFrom,
         yearTo: params.yearTo,
         maxResults: 10,
-      },
+        sources: params.sources,
+      } as any,
     });
   };
 

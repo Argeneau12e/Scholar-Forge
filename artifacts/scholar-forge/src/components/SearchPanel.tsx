@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Search, ClipboardPaste, Link2, AlertCircle } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Search,
+  ClipboardPaste,
+  Link2,
+  AlertCircle,
+  Wand2,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,14 +17,12 @@ import { useSupervisor } from "@/hooks/useSupervisor";
 import { useToast } from "@/hooks/use-toast";
 import { useCollection } from "@/hooks/useCollection";
 
-export type SearchSource = "pubmed" | "both" | "semantic";
-
 export interface PanelSearchParams {
   topic: string;
   phrase: string;
   yearFrom: number | null;
   yearTo: number | null;
-  source: SearchSource;
+  sources: string[];
 }
 
 interface SearchPanelProps {
@@ -24,11 +30,80 @@ interface SearchPanelProps {
   isSearching: boolean;
 }
 
-const SOURCE_OPTIONS: { value: SearchSource; label: string; hint: string }[] = [
-  { value: "pubmed",   label: "PubMed",          hint: "Open access full text" },
-  { value: "both",     label: "Both",             hint: "Recommended" },
-  { value: "semantic", label: "Semantic Scholar", hint: "Broader coverage" },
+interface SourceOption {
+  id: string;
+  label: string;
+  tooltip: string;
+  defaultOn: boolean;
+}
+
+const SOURCE_OPTIONS: SourceOption[] = [
+  {
+    id: "openalex",
+    label: "OpenAlex",
+    tooltip: "200M+ works — the broadest open-access index. Best primary source.",
+    defaultOn: true,
+  },
+  {
+    id: "pubmed",
+    label: "PubMed",
+    tooltip: "Biomedical & life-science open-access full text via PubMed Central.",
+    defaultOn: true,
+  },
+  {
+    id: "semantic",
+    label: "Semantic Scholar",
+    tooltip: "AI-powered relevance scoring across all disciplines.",
+    defaultOn: false,
+  },
+  {
+    id: "europepmc",
+    label: "Europe PMC",
+    tooltip: "Life sciences with European preprints and clinical data.",
+    defaultOn: false,
+  },
+  {
+    id: "core",
+    label: "CORE",
+    tooltip: "Humanities & social sciences open repositories with full text. Requires CORE_API_KEY.",
+    defaultOn: false,
+  },
+  {
+    id: "arxiv",
+    label: "arXiv",
+    tooltip: "Preprints in CS, physics, math, and quantitative biology. Not peer-reviewed.",
+    defaultOn: false,
+  },
+  {
+    id: "doaj",
+    label: "DOAJ",
+    tooltip: "Directory of Open Access Journals — verified gold open-access articles.",
+    defaultOn: false,
+  },
+  {
+    id: "base",
+    label: "BASE",
+    tooltip: "Bielefeld Academic Search Engine — broad multi-disciplinary fallback.",
+    defaultOn: false,
+  },
 ];
+
+const DEFAULT_SOURCES = SOURCE_OPTIONS.filter((s) => s.defaultOn).map((s) => s.id);
+
+// Discipline-based source recommendations
+function recommendSources(focusAreas: string[]): string[] {
+  const text = focusAreas.join(" ").toLowerCase();
+  if (/\b(medic|bio|pharmac|clinic|health|disease|neuroscien|gene|cell|cancer)\b/.test(text)) {
+    return ["pubmed", "europepmc", "openalex"];
+  }
+  if (/\b(comput|machine.?learn|software|algorithm|deep.?learn|ai|physics|math|quantum|robot)\b/.test(text)) {
+    return ["arxiv", "semantic", "openalex"];
+  }
+  if (/\b(human|social|histor|literat|philos|educat|law|politic|econom|psycholog)\b/.test(text)) {
+    return ["core", "base", "doaj", "openalex"];
+  }
+  return DEFAULT_SOURCES;
+}
 
 const MIN_ITEMS_GAP = 8;
 
@@ -45,7 +120,7 @@ export function SearchPanel({ onSearch, isSearching }: SearchPanelProps) {
   const [yearTo, setYearTo] = useState<string>(
     config?.yearTo?.toString() ?? "2025"
   );
-  const [source, setSource] = useState<SearchSource>("both");
+  const [selectedSources, setSelectedSources] = useState<string[]>(DEFAULT_SOURCES);
   const [yearError, setYearError] = useState<string | null>(null);
 
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -72,7 +147,32 @@ export function SearchPanel({ onSearch, isSearching }: SearchPanelProps) {
     validateYears(yearFrom, val);
   };
 
-  const canSearch = topic.trim().length >= 3 && !isSearching && !yearError;
+  const toggleSource = (id: string) => {
+    setSelectedSources((prev) => {
+      if (prev.includes(id)) {
+        if (prev.length === 1) return prev; // always keep at least one
+        return prev.filter((s) => s !== id);
+      }
+      return [...prev, id];
+    });
+  };
+
+  const handleAutoSelect = () => {
+    const focusAreas = config?.focusAreas ?? [];
+    if (!focusAreas.length) {
+      toast({
+        title: "No supervisor focus areas set",
+        description: "Set focus areas in your supervisor profile to auto-select sources.",
+      });
+      return;
+    }
+    const recommended = recommendSources(focusAreas);
+    setSelectedSources(recommended);
+    toast({ title: "Sources auto-selected based on your supervisor's discipline" });
+  };
+
+  const canSearch =
+    topic.trim().length >= 3 && !isSearching && !yearError && selectedSources.length > 0;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +182,7 @@ export function SearchPanel({ onSearch, isSearching }: SearchPanelProps) {
       phrase: phrase.trim(),
       yearFrom: yearFrom ? parseInt(yearFrom) : null,
       yearTo: yearTo ? parseInt(yearTo) : null,
-      source,
+      sources: selectedSources,
     });
   };
 
@@ -130,11 +230,17 @@ export function SearchPanel({ onSearch, isSearching }: SearchPanelProps) {
                 onChange={(e) => setTopic(e.target.value)}
                 data-testid="sp-topic"
                 aria-required="true"
-                aria-describedby={topic.length > 0 && topic.trim().length < 3 ? "topic-error" : undefined}
+                aria-describedby={
+                  topic.length > 0 && topic.trim().length < 3 ? "topic-error" : undefined
+                }
               />
             </div>
             {topic.length > 0 && topic.trim().length < 3 && (
-              <p id="topic-error" role="alert" className="text-[11px] text-destructive flex items-center gap-1">
+              <p
+                id="topic-error"
+                role="alert"
+                className="text-[11px] text-destructive flex items-center gap-1"
+              >
                 <AlertCircle className="h-3 w-3" aria-hidden />
                 Enter at least 3 characters
               </p>
@@ -180,7 +286,9 @@ export function SearchPanel({ onSearch, isSearching }: SearchPanelProps) {
                 aria-label="Year from"
                 aria-invalid={!!yearError}
               />
-              <span className="text-muted-foreground text-xs shrink-0" aria-hidden>–</span>
+              <span className="text-muted-foreground text-xs shrink-0" aria-hidden>
+                –
+              </span>
               <Input
                 type="number"
                 min={1900}
@@ -202,29 +310,52 @@ export function SearchPanel({ onSearch, isSearching }: SearchPanelProps) {
             )}
           </div>
 
-          {/* Source toggle */}
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium text-muted-foreground">Source</Label>
-            <div className="flex gap-1 flex-wrap" role="group" aria-label="Search source">
-              {SOURCE_OPTIONS.map((opt) => (
+          {/* Sources multi-select */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-medium text-muted-foreground">Sources</Label>
+              {config?.focusAreas?.length ? (
                 <button
-                  key={opt.value}
                   type="button"
-                  onClick={() => setSource(opt.value)}
-                  title={opt.hint}
-                  aria-pressed={source === opt.value}
-                  className={cn(
-                    "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
-                    source === opt.value
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-background text-foreground/70 border-border hover:border-primary/60 hover:text-primary"
-                  )}
-                  data-testid={`sp-source-${opt.value}`}
+                  onClick={handleAutoSelect}
+                  title="Auto-select sources based on your supervisor's discipline"
+                  className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors"
                 >
-                  {opt.label}
+                  <Wand2 className="h-3 w-3" />
+                  Best for my discipline
                 </button>
-              ))}
+              ) : null}
             </div>
+            <div
+              className="flex flex-wrap gap-1"
+              role="group"
+              aria-label="Select search sources"
+            >
+              {SOURCE_OPTIONS.map((opt) => {
+                const active = selectedSources.includes(opt.id);
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => toggleSource(opt.id)}
+                    title={opt.tooltip}
+                    aria-pressed={active}
+                    data-testid={`sp-source-${opt.id}`}
+                    className={cn(
+                      "px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors",
+                      active
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background text-foreground/60 border-border hover:border-primary/50 hover:text-foreground/80"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-muted-foreground/70 leading-relaxed">
+              Hover a chip for details. At least one source must be selected.
+            </p>
           </div>
 
           {/* Search button */}
@@ -236,9 +367,25 @@ export function SearchPanel({ onSearch, isSearching }: SearchPanelProps) {
           >
             {isSearching ? (
               <span className="flex items-center gap-2">
-                <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden>
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                <svg
+                  className="animate-spin h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8v8H4z"
+                  />
                 </svg>
                 Searching papers…
               </span>
@@ -253,11 +400,18 @@ export function SearchPanel({ onSearch, isSearching }: SearchPanelProps) {
       {gapNeeded > 0 && (
         <div className="px-4 py-3 border-b border-border bg-muted/30">
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            <span className="font-medium text-foreground">{gapProgress}/{MIN_ITEMS_GAP}</span> snippets
-            {" "}— save {gapNeeded} more to unlock{" "}
+            <span className="font-medium text-foreground">
+              {gapProgress}/{MIN_ITEMS_GAP}
+            </span>{" "}
+            snippets — save {gapNeeded} more to unlock{" "}
             <span className="font-medium text-foreground">Gap Finder</span>
           </p>
-          <div className="mt-1.5 h-1.5 bg-muted rounded-full overflow-hidden" role="progressbar" aria-valuenow={gapProgress} aria-valuemax={MIN_ITEMS_GAP}>
+          <div
+            className="mt-1.5 h-1.5 bg-muted rounded-full overflow-hidden"
+            role="progressbar"
+            aria-valuenow={gapProgress}
+            aria-valuemax={MIN_ITEMS_GAP}
+          >
             <div
               className="h-full bg-primary/50 rounded-full transition-all duration-500"
               style={{ width: `${(gapProgress / MIN_ITEMS_GAP) * 100}%` }}
@@ -325,8 +479,9 @@ export function SearchPanel({ onSearch, isSearching }: SearchPanelProps) {
 
       <div className="p-4 flex-1">
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Searches PubMed (open access full text) and Semantic Scholar.
+          Searches up to 8 open-access academic sources simultaneously.
           Supervisor constraints and year filters are applied automatically.
+          Results are deduplicated by DOI and title.
         </p>
       </div>
     </aside>

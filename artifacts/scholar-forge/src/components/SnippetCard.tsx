@@ -64,6 +64,29 @@ function highlightText(text: string, phrase: string): React.ReactNode {
   );
 }
 
+// ─── Source badge ────────────────────────────────────────────────────────────
+const SOURCE_BADGE: Record<string, { label: string; className: string }> = {
+  pubmed:    { label: "PMC",          className: "text-blue-700 border-blue-200 bg-blue-50" },
+  semantic:  { label: "S2",           className: "text-violet-700 border-violet-200 bg-violet-50" },
+  openalex:  { label: "OpenAlex",     className: "text-emerald-700 border-emerald-200 bg-emerald-50" },
+  europepmc: { label: "Europe PMC",   className: "text-cyan-700 border-cyan-200 bg-cyan-50" },
+  core:      { label: "CORE",         className: "text-amber-700 border-amber-200 bg-amber-50" },
+  arxiv:     { label: "arXiv",        className: "text-red-700 border-red-200 bg-red-50" },
+  doaj:      { label: "DOAJ",         className: "text-pink-700 border-pink-200 bg-pink-50" },
+  base:      { label: "BASE",         className: "text-indigo-700 border-indigo-200 bg-indigo-50" },
+};
+
+function SourceBadge({ source }: { source: string | null }) {
+  if (!source) return null;
+  const cfg = SOURCE_BADGE[source];
+  if (!cfg) return null;
+  return (
+    <Badge variant="outline" className={cn(cfg.className, "text-[10px]")}>
+      {cfg.label}
+    </Badge>
+  );
+}
+
 // ─── Compliance logic ────────────────────────────────────────────────────────
 type ComplianceLevel = "green" | "yellow" | "red";
 
@@ -253,21 +276,27 @@ export function SnippetCard({
               </Badge>
             ) : null}
 
-            {paper.source === "pubmed" ? (
+            <SourceBadge source={paper.source ?? null} />
+            {(paper as unknown as { isPreprint?: boolean }).isPreprint && (
               <Badge
                 variant="outline"
-                className="text-blue-700 border-blue-200 bg-blue-50 text-[10px]"
+                className="text-orange-700 border-orange-200 bg-orange-50 text-[10px]"
+                title="This is a preprint and has not been peer-reviewed"
               >
-                PMC
+                Preprint
               </Badge>
-            ) : paper.source === "semantic" ? (
-              <Badge
-                variant="outline"
-                className="text-violet-700 border-violet-200 bg-violet-50 text-[10px]"
+            )}
+            {(paper as unknown as { freePdfUrl?: string | null }).freePdfUrl && (
+              <a
+                href={(paper as unknown as { freePdfUrl: string }).freePdfUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-300 bg-emerald-50 rounded-full px-2 py-0.5 hover:bg-emerald-100 transition-colors"
+                title="Free full-text PDF via Unpaywall"
               >
-                S2
-              </Badge>
-            ) : null}
+                Free PDF ↗
+              </a>
+            )}
           </div>
         </div>
 
