@@ -1,20 +1,21 @@
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Sidebar, type SearchParams } from "@/components/sidebar";
+import { SearchPanel, type PanelSearchParams } from "@/components/SearchPanel";
+import { SnippetCard, SnippetCardSkeleton } from "@/components/SnippetCard";
 import {
   useSearchPapers,
-  useGetActiveSupervisor,
   useGetWorkspace,
-  useAddToWorkspace,
   useRemoveFromWorkspace,
   useGetWorkspaceStats,
   useGetWorkspaceAnalysis,
+  useAddToWorkspace,
   getGetSearchHistoryQueryKey,
   getGetWorkspaceQueryKey,
   getGetWorkspaceStatsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useSupervisor } from "@/hooks/useSupervisor";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -29,74 +30,64 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   BookOpen,
   ExternalLink,
-  BookmarkPlus,
   BookmarkMinus,
   Sparkles,
   Filter,
-  Calendar,
-  Users,
-  BarChart3,
   Search,
   BookMarked,
-  FileText,
-  FlaskConical,
-  Globe,
+  AlertCircle,
+  WifiOff,
 } from "lucide-react";
-import type {
-  Paper,
-  SearchPapersResponse,
-} from "@workspace/api-client-react/src/generated/api.schemas";
+import type { SearchPapersResponse } from "@workspace/api-client-react/src/generated/api.schemas";
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"results" | "workspace">(
-    "results"
-  );
-  const [searchResults, setSearchResults] =
-    useState<SearchPapersResponse | null>(null);
+  const [activeTab, setActiveTab] = useState<"results" | "workspace">("results");
+  const [searchResults, setSearchResults] = useState<SearchPapersResponse | null>(null);
+  const [searchPhrase, setSearchPhrase] = useState("");
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
-
-  const { data: activeSupervisorData } = useGetActiveSupervisor();
-  const activeSupervisorId = activeSupervisorData?.supervisor?.id;
+  const { config: supervisorConfig } = useSupervisor();
 
   const searchMutation = useSearchPapers({
     mutation: {
       onSuccess: (data) => {
         setSearchResults(data);
+        setSearchError(null);
         setActiveTab("results");
-        queryClient.invalidateQueries({
-          queryKey: getGetSearchHistoryQueryKey(),
-        });
+        queryClient.invalidateQueries({ queryKey: getGetSearchHistoryQueryKey() });
       },
-      onError: () => {
-        toast({
-          title: "Search failed",
-          description: "An error occurred while searching. Try again shortly.",
-          variant: "destructive",
-        });
+      onError: (err: unknown) => {
+        const msg =
+          err instanceof Error
+            ? err.message
+            : "Something went wrong while searching. Check your connection and try again.";
+        setSearchError(msg);
+        setSearchResults(null);
       },
     },
   });
 
-  const handleSearch = (params: SearchParams) => {
+  const handleSearch = (params: PanelSearchParams) => {
+    setSearchPhrase(params.phrase);
+    setSearchError(null);
     searchMutation.mutate({
       data: {
-        query: params.query,
-        topic: params.query,
-        phrase: params.phrase ?? null,
-        source: params.source ?? "both",
-        yearFrom: params.yearFrom ?? null,
-        yearTo: params.yearTo ?? null,
-        maxResults: params.maxResults,
-        supervisorId: activeSupervisorId,
+        query: params.topic,
+        topic: params.topic,
+        phrase: params.phrase || null,
+        source: params.source === "both" ? "both" : params.source,
+        yearFrom: params.yearFrom,
+        yearTo: params.yearTo,
+        maxResults: 10,
       },
     });
   };
 
   return (
     <div className="flex h-full w-full">
-      <Sidebar onSearch={handleSearch} isSearching={searchMutation.isPending} />
+      <SearchPanel onSearch={handleSearch} isSearching={searchMutation.isPending} />
 
       <main className="flex-1 overflow-hidden bg-background flex flex-col">
         <Tabs
@@ -104,24 +95,19 @@ export default function Home() {
           onValueChange={(v) => setActiveTab(v as "results" | "workspace")}
           className="h-full flex flex-col"
         >
-          <div className="border-b border-border bg-card px-6 py-2 flex items-center justify-between">
+          <div className="border-b border-border bg-card px-6 py-2 flex items-center justify-between shrink-0">
             <TabsList className="bg-muted">
-              <TabsTrigger
-                value="results"
-                className="data-[state=active]:bg-background"
-              >
+              <TabsTrigger value="results" className="data-[state=active]:bg-background">
                 <Search className="h-4 w-4 mr-2" />
                 Results
               </TabsTrigger>
-              <TabsTrigger
-                value="workspace"
-                className="data-[state=active]:bg-background"
-              >
+              <TabsTrigger value="workspace" className="data-[state=active]:bg-background">
                 <BookMarked className="h-4 w-4 mr-2" />
                 Workspace
               </TabsTrigger>
             </TabsList>
 
+            {/* Status chips */}
             <div className="flex items-center gap-2">
               {searchResults?.semanticRateLimited && (
                 <Badge
@@ -129,32 +115,29 @@ export default function Home() {
                   className="text-amber-700 border-amber-300 bg-amber-50 text-[10px]"
                   title="Semantic Scholar is temporarily rate-limited. Showing PubMed results only."
                 >
+                  <WifiOff className="h-2.5 w-2.5 mr-1" />
                   S2 rate-limited · PubMed only
                 </Badge>
               )}
-              {searchResults?.sources && searchResults.sources.length > 0 && (
-                <div className="flex items-center gap-1">
-                  {searchResults.sources.map((s) => (
-                    <Badge
-                      key={s}
-                      variant="outline"
-                      className={
-                        s === "pubmed"
-                          ? "text-blue-700 border-blue-300 bg-blue-50 text-[10px]"
-                          : "text-violet-700 border-violet-300 bg-violet-50 text-[10px]"
-                      }
-                    >
-                      {s === "pubmed" ? "PubMed" : "Semantic Scholar"}
-                    </Badge>
-                  ))}
-                </div>
-              )}
+              {searchResults?.sources?.map((s) => (
+                <Badge
+                  key={s}
+                  variant="outline"
+                  className={
+                    s === "pubmed"
+                      ? "text-blue-700 border-blue-300 bg-blue-50 text-[10px]"
+                      : "text-violet-700 border-violet-300 bg-violet-50 text-[10px]"
+                  }
+                >
+                  {s === "pubmed" ? "PubMed" : "Semantic Scholar"}
+                </Badge>
+              ))}
               {activeTab === "results" && searchResults?.supervisorFiltered && (
                 <Badge
                   variant="outline"
-                  className="text-primary border-primary/20 bg-primary/5"
+                  className="text-emerald-700 border-emerald-300 bg-emerald-50 text-[10px]"
                 >
-                  <Sparkles className="h-3 w-3 mr-1" />
+                  <Sparkles className="h-2.5 w-2.5 mr-1" />
                   Supervisor Filtered
                 </Badge>
               )}
@@ -162,20 +145,17 @@ export default function Home() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-6">
-            <TabsContent
-              value="results"
-              className="h-full m-0 data-[state=inactive]:hidden"
-            >
+            <TabsContent value="results" className="m-0 data-[state=inactive]:hidden">
               <ResultsView
                 results={searchResults}
                 isSearching={searchMutation.isPending}
+                searchPhrase={searchPhrase}
+                searchError={searchError}
+                supervisorConfig={supervisorConfig}
               />
             </TabsContent>
 
-            <TabsContent
-              value="workspace"
-              className="h-full m-0 data-[state=inactive]:hidden"
-            >
+            <TabsContent value="workspace" className="m-0 data-[state=inactive]:hidden">
               <WorkspaceView />
             </TabsContent>
           </div>
@@ -185,266 +165,106 @@ export default function Home() {
   );
 }
 
-function SourceBadge({ source }: { source?: string | null }) {
-  if (!source) return null;
-  if (source === "pubmed") {
-    return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 font-medium">
-        <Globe className="h-2.5 w-2.5" />
-        PMC
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex items-center gap-0.5 text-[10px] text-violet-700 bg-violet-50 border border-violet-200 rounded px-1.5 py-0.5 font-medium">
-      <FlaskConical className="h-2.5 w-2.5" />
-      S2
-    </span>
-  );
-}
-
+// ─── Results view ──────────────────────────────────────────────────────────
 function ResultsView({
   results,
   isSearching,
+  searchPhrase,
+  searchError,
+  supervisorConfig,
 }: {
   results: SearchPapersResponse | null;
   isSearching: boolean;
+  searchPhrase: string;
+  searchError: string | null;
+  supervisorConfig: ReturnType<typeof useSupervisor>["config"];
 }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const { data: workspacePapers } = useGetWorkspace();
-  const workspacePaperIds = new Set(
-    workspacePapers?.map((p) => p.paperId) || []
-  );
-
-  const addToWorkspace = useAddToWorkspace({
-    mutation: {
-      onSuccess: () => {
-        toast({ title: "Added to workspace" });
-        queryClient.invalidateQueries({ queryKey: getGetWorkspaceQueryKey() });
-        queryClient.invalidateQueries({
-          queryKey: getGetWorkspaceStatsQueryKey(),
-        });
-      },
-    },
-  });
-
+  // Loading skeleton
   if (isSearching) {
     return (
-      <div className="max-w-4xl mx-auto space-y-4">
-        {[1, 2, 3].map((i) => (
-          <Card key={i} className="animate-pulse">
-            <CardHeader className="pb-2">
-              <Skeleton className="h-6 w-3/4 mb-2" />
-              <Skeleton className="h-4 w-1/2" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-16 w-full" />
-            </CardContent>
-          </Card>
-        ))}
-        <p className="text-center text-sm text-muted-foreground mt-4">
-          Querying PubMed and Semantic Scholar…
+      <div className="max-w-3xl mx-auto space-y-4">
+        <SnippetCardSkeleton />
+        <SnippetCardSkeleton />
+        <SnippetCardSkeleton />
+        <p className="text-center text-sm text-muted-foreground mt-2 animate-pulse">
+          Querying academic databases…
         </p>
       </div>
     );
   }
 
+  // Error state
+  if (searchError) {
+    return (
+      <div className="max-w-md mx-auto h-full flex flex-col items-center justify-center text-center space-y-4">
+        <div className="h-14 w-14 rounded-full bg-destructive/10 flex items-center justify-center">
+          <AlertCircle className="h-7 w-7 text-destructive" />
+        </div>
+        <h2 className="font-serif text-xl text-foreground">Search failed</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {searchError.includes("rate")
+            ? "You've hit the rate limit. Please wait a moment before searching again."
+            : searchError.includes("network") || searchError.includes("fetch")
+            ? "Could not reach the search servers. Check your connection and try again."
+            : searchError}
+        </p>
+      </div>
+    );
+  }
+
+  // Empty state (no search yet)
   if (!results) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4">
-        <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-2">
-          <BookOpen className="h-8 w-8 text-primary" />
+        <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
+          <BookOpen className="h-8 w-8 text-emerald-700" />
         </div>
-        <h2 className="font-serif text-2xl text-foreground">
-          ScholarForge Workspace
-        </h2>
-        <p className="text-muted-foreground">
-          Enter a query in the sidebar to search PubMed and Semantic Scholar.
-          Your supervisor constraints are automatically applied.
+        <h2 className="font-serif text-2xl text-foreground">ScholarForge</h2>
+        <p className="text-muted-foreground text-sm leading-relaxed">
+          Enter a topic in the sidebar to search PubMed and Semantic Scholar.
+          Supervisor constraints and year range filters are applied automatically.
         </p>
       </div>
     );
   }
 
+  // No results found
   if (results.papers.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4">
         <Filter className="h-12 w-12 text-muted-foreground/50" />
         <h2 className="font-serif text-xl text-foreground">No papers found</h2>
-        <p className="text-muted-foreground">
-          Try broadening your search query or adjusting the year range in your
-          supervisor settings.
+        <p className="text-muted-foreground text-sm">
+          Try broadening the topic, relaxing the year range, or switching to
+          "Both" sources.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl mx-auto pb-12">
-      <div className="mb-6 flex items-center justify-between">
-        <h2 className="text-lg font-medium">
-          {results.total} result{results.total !== 1 ? "s" : ""} for "
-          {results.query}"
-        </h2>
-      </div>
+    <div className="max-w-3xl mx-auto pb-16">
+      <p className="text-sm text-muted-foreground mb-5">
+        <span className="font-medium text-foreground">{results.total}</span>{" "}
+        result{results.total !== 1 ? "s" : ""} for "
+        <span className="font-medium text-foreground">{results.query}</span>"
+      </p>
 
       <div className="space-y-4">
-        {results.papers.map((paper: Paper) => {
-          const inWorkspace = workspacePaperIds.has(paper.id);
-
-          return (
-            <Card key={paper.id} className="transition-all hover:shadow-md">
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="space-y-1.5 flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <SourceBadge source={paper.source} />
-                      {paper.openAccess && (
-                        <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 font-medium">
-                          Open Access
-                        </span>
-                      )}
-                    </div>
-                    <CardTitle className="font-serif text-xl text-primary leading-tight">
-                      {paper.url ? (
-                        <a
-                          href={paper.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="hover:underline inline-flex items-center gap-1.5"
-                          data-testid={`link-paper-${paper.id}`}
-                        >
-                          {paper.title}{" "}
-                          <ExternalLink className="h-4 w-4 opacity-50 shrink-0" />
-                        </a>
-                      ) : (
-                        paper.title
-                      )}
-                    </CardTitle>
-                    <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                      <span className="flex items-center gap-1 text-foreground/80">
-                        <Users className="h-3.5 w-3.5" />
-                        {paper.authors.slice(0, 3).join(", ")}
-                        {paper.authors.length > 3 ? " et al." : ""}
-                      </span>
-                      {paper.year && (
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3.5 w-3.5" /> {paper.year}
-                        </span>
-                      )}
-                      {paper.venue && (
-                        <span className="flex items-center gap-1 font-medium">
-                          <BookOpen className="h-3.5 w-3.5" /> {paper.venue}
-                        </span>
-                      )}
-                    </CardDescription>
-                  </div>
-
-                  {paper.relevanceScore != null && paper.relevanceScore > 0 && (
-                    <Badge
-                      variant="secondary"
-                      className="bg-primary/10 text-primary border-primary/20 shrink-0"
-                    >
-                      {(paper.relevanceScore * 100).toFixed(0)}% Match
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-3">
-                {paper.supervisorNote && (
-                  <div className="bg-amber-50 text-amber-800 p-3 rounded-md text-sm italic border border-amber-200 flex gap-2">
-                    <Sparkles className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
-                    <p>{paper.supervisorNote}</p>
-                  </div>
-                )}
-
-                {paper.abstract && (
-                  <p className="text-sm text-foreground/80 leading-relaxed line-clamp-3">
-                    {paper.abstract}
-                  </p>
-                )}
-
-                {/* Snippets from PubMed phrase matching */}
-                {paper.snippets && paper.snippets.length > 0 && (
-                  <div className="space-y-2 border-t border-border/50 pt-3">
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                      <FileText className="h-3 w-3" />
-                      Matched Sections
-                    </p>
-                    {paper.snippets.map((sn, i) => (
-                      <div
-                        key={i}
-                        className="bg-muted/50 rounded-md p-2.5 border border-border/50"
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            {sn.section}
-                          </span>
-                          {sn.matchScore > 0 && (
-                            <span className="text-[10px] text-primary font-medium">
-                              {sn.matchScore} keyword{sn.matchScore !== 1 ? "s" : ""} matched
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-foreground/80 leading-relaxed line-clamp-4">
-                          {sn.text}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-
-              <CardFooter className="pt-2 flex justify-between border-t border-border/40 mt-2">
-                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                  <BarChart3 className="h-3.5 w-3.5" />
-                  {paper.citationCount != null
-                    ? `${paper.citationCount} citations`
-                    : "Open Access"}
-                </div>
-
-                <Button
-                  variant={inWorkspace ? "secondary" : "outline"}
-                  size="sm"
-                  disabled={inWorkspace || addToWorkspace.isPending}
-                  onClick={() =>
-                    addToWorkspace.mutate({
-                      data: {
-                        paperId: paper.id,
-                        title: paper.title,
-                        authors: paper.authors,
-                        abstract: paper.abstract,
-                        year: paper.year,
-                        venue: paper.venue,
-                        url: paper.url,
-                        citationCount: paper.citationCount,
-                      },
-                    })
-                  }
-                  data-testid={`button-add-workspace-${paper.id}`}
-                >
-                  {inWorkspace ? (
-                    <>
-                      <BookMarked className="h-4 w-4 mr-2" /> Saved
-                    </>
-                  ) : (
-                    <>
-                      <BookmarkPlus className="h-4 w-4 mr-2" /> Add to Workspace
-                    </>
-                  )}
-                </Button>
-              </CardFooter>
-            </Card>
-          );
-        })}
+        {results.papers.map((paper) => (
+          <SnippetCard
+            key={paper.id}
+            paper={paper}
+            searchPhrase={searchPhrase}
+            supervisorConfig={supervisorConfig}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
+// ─── Workspace view (unchanged) ─────────────────────────────────────────────
 function WorkspaceView() {
   const { data: papers, isLoading: isLoadingPapers } = useGetWorkspace();
   const { data: stats, isLoading: isLoadingStats } = useGetWorkspaceStats();
@@ -457,15 +277,22 @@ function WorkspaceView() {
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const addToWorkspace = useAddToWorkspace({
+    mutation: {
+      onSuccess: () => {
+        toast({ title: "Added to workspace" });
+        queryClient.invalidateQueries({ queryKey: getGetWorkspaceQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getGetWorkspaceStatsQueryKey() });
+      },
+    },
+  });
 
   const removeFromWorkspace = useRemoveFromWorkspace({
     mutation: {
       onSuccess: () => {
         toast({ title: "Removed from workspace" });
         queryClient.invalidateQueries({ queryKey: getGetWorkspaceQueryKey() });
-        queryClient.invalidateQueries({
-          queryKey: getGetWorkspaceStatsQueryKey(),
-        });
+        queryClient.invalidateQueries({ queryKey: getGetWorkspaceStatsQueryKey() });
       },
     },
   });
@@ -473,7 +300,7 @@ function WorkspaceView() {
   if (isLoadingPapers || isLoadingStats) {
     return (
       <div className="p-8 text-center text-muted-foreground">
-        Loading workspace...
+        Loading workspace…
       </div>
     );
   }
@@ -485,9 +312,9 @@ function WorkspaceView() {
         <h2 className="font-serif text-xl text-foreground">
           Your workspace is empty
         </h2>
-        <p className="text-muted-foreground">
-          Search for papers and add them to your workspace to organize your
-          research.
+        <p className="text-muted-foreground text-sm">
+          Save papers from search results to organise your research and run
+          AI analysis across your collection.
         </p>
       </div>
     );
@@ -504,7 +331,7 @@ function WorkspaceView() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-serif text-primary">
+              <div className="text-3xl font-serif text-emerald-700">
                 {stats.totalPapers}
               </div>
             </CardContent>
@@ -521,16 +348,15 @@ function WorkspaceView() {
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-primary/5 border-primary/20">
+          <Card className="bg-emerald-50/50 border-emerald-200">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-primary">
+              <CardTitle className="text-sm font-medium text-emerald-700">
                 AI Research Analysis
               </CardTitle>
             </CardHeader>
             <CardContent>
               <Button
-                variant="default"
-                className="w-full"
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white"
                 onClick={() => {
                   setAnalysisOpen(true);
                   fetchAnalysis();
@@ -538,7 +364,7 @@ function WorkspaceView() {
                 data-testid="button-analyze"
               >
                 <Sparkles className="h-4 w-4 mr-2" />
-                Analyze Collection
+                Analyse Collection
               </Button>
             </CardContent>
           </Card>
@@ -546,10 +372,10 @@ function WorkspaceView() {
       )}
 
       {analysisOpen && (
-        <Card className="border-primary/30 bg-primary/5 shadow-md">
+        <Card className="border-emerald-200 bg-emerald-50/30 shadow-md">
           <CardHeader>
             <CardTitle className="font-serif flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
+              <Sparkles className="h-5 w-5 text-emerald-700" />
               Research Collection Analysis
             </CardTitle>
             <CardDescription>
@@ -575,13 +401,14 @@ function WorkspaceView() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <h4 className="font-medium text-sm text-primary uppercase tracking-wider mb-2">
+                    <h4 className="font-medium text-sm text-emerald-700 uppercase tracking-wider mb-2">
                       Key Themes
                     </h4>
                     <ul className="space-y-1">
                       {analysis.themes.map((theme: string, i: number) => (
                         <li key={i} className="text-sm flex items-start gap-2">
-                          <span className="text-primary mt-0.5">•</span> {theme}
+                          <span className="text-emerald-600 mt-0.5">•</span>
+                          {theme}
                         </li>
                       ))}
                     </ul>
@@ -593,7 +420,7 @@ function WorkspaceView() {
                     <ul className="space-y-1">
                       {analysis.gaps.map((gap: string, i: number) => (
                         <li key={i} className="text-sm flex items-start gap-2">
-                          <span className="text-amber-600 mt-0.5">•</span>{" "}
+                          <span className="text-amber-600 mt-0.5">•</span>
                           {gap}
                         </li>
                       ))}
@@ -624,15 +451,19 @@ function WorkspaceView() {
           <Card key={paper.id} className="group">
             <CardContent className="p-4 sm:p-6 flex flex-col sm:flex-row gap-4">
               <div className="flex-1 space-y-2">
-                <h4 className="font-serif text-lg font-medium leading-tight">
+                <h4
+                  className="font-serif text-lg font-medium leading-tight"
+                  style={{ fontFamily: "Lora, Georgia, serif" }}
+                >
                   {paper.url ? (
                     <a
                       href={paper.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="hover:underline text-foreground"
+                      className="hover:underline text-foreground inline-flex items-center gap-1.5 group/link"
                     >
                       {paper.title}
+                      <ExternalLink className="h-3.5 w-3.5 opacity-0 group-hover/link:opacity-40 transition-opacity" />
                     </a>
                   ) : (
                     paper.title
@@ -643,10 +474,10 @@ function WorkspaceView() {
                     {paper.authors.slice(0, 3).join(", ")}
                     {paper.authors.length > 3 ? " et al." : ""}
                   </span>
-                  {paper.year && <span>• {paper.year}</span>}
+                  {paper.year && <span>· {paper.year}</span>}
                   {paper.venue && (
                     <span className="font-medium text-foreground/70">
-                      • {paper.venue}
+                      · {paper.venue}
                     </span>
                   )}
                 </div>
@@ -661,9 +492,7 @@ function WorkspaceView() {
                   variant="ghost"
                   size="icon"
                   className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                  onClick={() =>
-                    removeFromWorkspace.mutate({ id: paper.id })
-                  }
+                  onClick={() => removeFromWorkspace.mutate({ id: paper.id })}
                   title="Remove from workspace"
                   data-testid={`button-remove-${paper.id}`}
                 >

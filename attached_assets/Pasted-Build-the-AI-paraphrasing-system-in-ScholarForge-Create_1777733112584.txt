@@ -1,0 +1,62 @@
+Build the AI paraphrasing system in ScholarForge.
+
+Create /server/routes/paraphrase.js:
+
+POST /api/paraphrase accepts:
+{
+  text: string (the snippet to paraphrase),
+  intensity: 'literal' | 'moderate' | 'student',
+  discipline: string (from supervisor config),
+  citation: object (author, year, journal, doi)
+}
+
+Use @anthropic-ai/sdk. Model: claude-sonnet-4-5 (or latest available).
+max_tokens: 1000.
+
+SYSTEM PROMPT (use exactly):
+"You are an expert academic writing assistant helping a university student 
+paraphrase research text for their dissertation. You must:
+1. Preserve ALL scientific facts, measurements, and findings exactly
+2. Never introduce claims not present in the original
+3. Always maintain academic register appropriate for the discipline
+4. Return ONLY the paraphrased text followed by the formatted citation
+5. Never add commentary or explain what you did"
+
+USER PROMPT — build dynamically based on intensity:
+
+If intensity = 'literal':
+"Paraphrase this text with minimal changes. Change sentence structure 
+slightly but keep most of the same vocabulary. Discipline: [discipline].
+
+Original text: [text]
+
+End with this citation in parentheses: ([authors], [year])"
+
+If intensity = 'moderate':
+"Paraphrase this text significantly. Use different vocabulary and sentence 
+structure while preserving all facts and meaning. Discipline: [discipline].
+
+Original text: [text]
+
+End with this citation in parentheses: ([authors], [year])"
+
+If intensity = 'student':
+"Rewrite this text in the voice of a knowledgeable student explaining the 
+concept to a peer. Use natural academic language, not stiff jargon. 
+Preserve all facts. Discipline: [discipline].
+
+Original text: [text]
+
+End with this citation in parentheses: ([authors], [year])"
+
+Return: { paraphrase: string, citationInline: string }
+
+Create /client/src/components/ParaphrasePanel.jsx:
+- Shows selected snippet text in a read-only box
+- Three-stop slider labeled: "Stay close" — "Moderate rewrite" — "My voice"
+- Discipline display (from supervisor, not editable here)
+- "Paraphrase" button
+- Result area: paraphrased text in an editable textarea
+- Inline citation shown below in green
+- "Save paraphrase to collection" button
+- "Try different intensity" button that re-runs with same settings
