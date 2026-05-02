@@ -1,0 +1,65 @@
+Do a final polish and hardening pass on ScholarForge.
+
+1. ONBOARDING WIZARD:
+Create /client/src/components/OnboardingWizard.jsx.
+A 4-step first-run flow shown to users who haven't completed onboarding
+(check localStorage "sf_onboarded").
+
+Step 1 — Welcome: "ScholarForge turns hours of research into minutes. 
+  Built by a student, for every student. Free and open source."
+  Show a simple diagram of the workflow: Search → Save → Paraphrase → 
+  Export.
+Step 2 — Supervisor Mode: Walk through setting year range and citation 
+  style. Pre-fills the SupervisorSetup form.
+Step 3 — Your first search: pre-fills the search with a sample topic 
+  ("climate change adaptation"), runs it, shows the results.
+Step 4 — You're ready: "Your workspace is set up. Start with a real 
+  topic from your dissertation."
+
+"Skip" link on every step. "Back" and "Next" navigation.
+On completion, set localStorage "sf_onboarded" = true.
+
+2. ERROR HANDLING AUDIT:
+- Every API call: wrap in try/catch, return { error: string } on failure
+- Search fails: show "Search unavailable. Paste your snippet manually." 
+  with the paste textarea auto-opened
+- PubMed timeout (>8 seconds): show "PubMed is slow right now. 
+  Trying Semantic Scholar..." and fall back automatically
+- Claude API fails: show "AI unavailable. Try again in a moment." 
+  with a retry button — never a blank screen
+- Export fails: show "Export failed. Copy your bibliography below:" 
+  and show plain text version inline
+- Empty collection: show illustrated empty state with text 
+  "Your collection is empty. Search for a topic to get started."
+
+3. LOADING STATES:
+- Search: "Searching 4 million open-access papers..." → 
+  "Extracting relevant passages..." → "Checking supervisor rules..."
+  (rotate every 2 seconds)
+- Gap finder: "Reading your collection..." → 
+  "Identifying patterns..." → "Finding your thesis angle..."
+- Lit review: "Organizing your sources..." → 
+  "Drafting narrative..." → "Adding citation markers..."
+- All: show skeleton cards appropriate to the result type
+
+4. PERFORMANCE:
+- Debounce search input: don't fire API until 500ms after user stops 
+  typing in topic field
+- Lazy-load the Argument Mapper component (heavy D3 dependency)
+- Memoize citation formatting — same DOI never formatted twice
+
+5. META AND SEO:
+index.html title: "ScholarForge — Free Academic Research Assistant"
+description: "Free AI tool for students: find research snippets, 
+  paraphrase with citations, detect research gaps, and draft literature 
+  reviews. Built by a student, open source."
+
+6. FOOTER:
+"Built by [your name] · Open Source · MIT License"
+"Powered by Claude (Anthropic) · PubMed Central · Semantic Scholar"
+"ScholarForge is not affiliated with any university"
+
+7. README on GitHub:
+Sections: What it does | Screenshots | Quick start | Tech stack | 
+  Adding citation styles | Adding search backends | Contributing | 
+  University deployment guide | License

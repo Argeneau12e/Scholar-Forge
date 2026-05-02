@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useRotatingMessage } from "@/hooks/useRotatingMessage";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SearchPanel, type PanelSearchParams } from "@/components/SearchPanel";
 import { SnippetCard, SnippetCardSkeleton } from "@/components/SnippetCard";
@@ -166,6 +167,12 @@ export default function Home() {
 }
 
 // ─── Results view ──────────────────────────────────────────────────────────
+const SEARCH_MESSAGES = [
+  "Searching 4 million open-access papers…",
+  "Extracting relevant passages…",
+  "Checking supervisor rules…",
+];
+
 function ResultsView({
   results,
   isSearching,
@@ -179,6 +186,8 @@ function ResultsView({
   searchError: string | null;
   supervisorConfig: ReturnType<typeof useSupervisor>["config"];
 }) {
+  const searchMessage = useRotatingMessage(SEARCH_MESSAGES, 2000);
+
   // Loading skeleton
   if (isSearching) {
     return (
@@ -187,7 +196,7 @@ function ResultsView({
         <SnippetCardSkeleton />
         <SnippetCardSkeleton />
         <p className="text-center text-sm text-muted-foreground mt-2 animate-pulse">
-          Querying academic databases…
+          {searchMessage}
         </p>
       </div>
     );
