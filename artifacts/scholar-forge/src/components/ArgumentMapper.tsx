@@ -31,6 +31,7 @@ interface ArgMapResult {
   thesisNode: { label: string; bestPosition: string; positioning: string };
 }
 
+// D3 simulation node — extends NodeDatum so x/y/vx/vy/fx/fy are all defined
 interface SimNode extends d3.SimulationNodeDatum {
   id: string;
   label: string;
@@ -39,12 +40,20 @@ interface SimNode extends d3.SimulationNodeDatum {
   isThesis?: boolean;
 }
 
+// D3 simulation edge — source/target will be resolved to SimNode objects by d3
 interface SimEdge extends d3.SimulationLinkDatum<SimNode> {
   relationship: RelType;
   strength: number;
   note: string;
-  _source: string;
-  _target: string;
+  srcId: string;
+  tgtId: string;
+}
+
+interface TooltipState {
+  x: number;
+  y: number;
+  title: string;
+  snippet: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -72,16 +81,15 @@ const CLUSTER_PALETTE = [
 ];
 
 const THESIS_KEY = "sf_thesis";
-
 function getSavedThesis(): string {
   try { return localStorage.getItem(THESIS_KEY) ?? ""; } catch { return ""; }
 }
 
-// ─── D3 Helpers ───────────────────────────────────────────────────────────────
+// ─── Geometry helpers ─────────────────────────────────────────────────────────
 
 function nodeRadius(node: SimNode): number {
-  if (node.isThesis) return 28;
-  return 18 + node.centrality * 18;
+  if (node.isThesis) return 26;
+  return 16 + node.centrality * 16;
 }
 
 function starPath(r: number): string {
@@ -96,7 +104,7 @@ function starPath(r: number): string {
   return d + "Z";
 }
 
-// ─── Graph renderer (runs inside useEffect, D3 owns the DOM) ─────────────────
+// ─── Graph renderer ───────────────────────────────────────────────────────────
 
 function renderGraph(
   svgEl: SVGSVGElement,
@@ -104,21 +112,21 @@ function renderGraph(
   itemMap: Map<string, CollectionItem>,
   onSelectNode: (id: string | null, edges: ArgEdge[]) => void,
   onHoverEdge: (note: string | null) => void,
-  onTooltip: (info: { x: number; y: number; title: string; snippet: string } | null) => void
-) {
+  onTooltip: (t: TooltipState | null) => void
+): () => void {
   const W = svgEl.clientWidth || 800;
   const H = svgEl.clientHeight || 520;
 
   const svg = d3.select(svgEl);
   svg.selectAll("*").remove();
 
-  // Cluster → colour
+  // Cluster colour map
   const clusters = Array.from(new Set(data.nodes.map((n) => n.cluster)));
-  const clusterColor = (c: string) =>
-    CLUSTER_PALETTE[clusters.indexOf(c) % CLUSTER_PALETTE.length];
+  const clusterColor = (c: string): string =>
+    CLUSTER_PALETTE[clusters.indexOf(c) % CLUSTER_PALETTE.length] ?? "#888";
 
-  // Build sim nodes (paper nodes + thesis node)
-  const thesisSimNode: SimNode = {
+  // Build nodes
+  const thesisNode: SimNode = {
     id: "thesis",
     label: data.thesisNode.label,
     cluster: "__thesis__",
@@ -127,66 +135,67 @@ function renderGraph(
     fx: W / 2,
     fy: H / 2,
   };
-
   const paperNodes: SimNode[] = data.nodes.map((n) => ({ ...n }));
-  const allNodes: SimNode[] = [...paperNodes, thesisSimNode];
+  const allNodes: SimNode[] = [...paperNodes, thesisNode];
 
-  // Build sim edges — include thesis connections to bestPosition paper
+  // Build edges
   const paperEdges: SimEdge[] = data.edges.map((e) => ({
     source: e.source,
     target: e.target,
     relationship: e.relationship,
     strength: e.strength,
     note: e.note,
-    _source: e.source,
-    _target: e.target,
+    srcId: e.source,
+    tgtId: e.target,
   }));
 
-  const thesisEdge: SimEdge | null = data.thesisNode.bestPosition
-    ? {
-        source: "thesis",
-        target: data.thesisNode.bestPosition,
-        relationship: "supports",
-        strength: 0.9,
-        note: data.thesisNode.positioning,
-        _source: "thesis",
-        _target: data.thesisNode.bestPosition,
-      }
-    : null;
+  const thesisEdges: SimEdge[] = data.thesisNode.bestPosition
+    ? [
+        {
+          source: "thesis",
+          target: data.thesisNode.bestPosition,
+          relationship: "supports" as RelType,
+          strength: 0.9,
+          note: data.thesisNode.positioning,
+          srcId: "thesis",
+          tgtId: data.thesisNode.bestPosition,
+        },
+      ]
+    : [];
 
-  const allEdges: SimEdge[] = thesisEdge ? [...paperEdges, thesisEdge] : paperEdges;
+  const allEdges: SimEdge[] = [...paperEdges, ...thesisEdges];
 
-  // Defs — arrowheads per relationship type
+  // Arrow markers per relation type
   const defs = svg.append("defs");
   (Object.keys(EDGE_COLORS) as RelType[]).forEach((rel) => {
-    const color = EDGE_COLORS[rel];
     defs
       .append("marker")
       .attr("id", `arrow-${rel}`)
       .attr("viewBox", "0 -5 10 10")
-      .attr("refX", 22)
+      .attr("refX", 24)
       .attr("refY", 0)
       .attr("markerWidth", 6)
       .attr("markerHeight", 6)
       .attr("orient", "auto")
       .append("path")
       .attr("d", "M0,-5L10,0L0,5")
-      .attr("fill", color)
-      .attr("opacity", 0.8);
+      .attr("fill", EDGE_COLORS[rel])
+      .attr("opacity", 0.85);
   });
 
   // Zoom container
-  const container = svg.append("g").attr("class", "zoom-container");
-
+  const container = svg.append("g");
   svg.call(
     d3
       .zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.3, 4])
-      .on("zoom", (event) => container.attr("transform", event.transform))
+      .scaleExtent([0.25, 4])
+      .on("zoom", (event: d3.D3ZoomEvent<SVGSVGElement, unknown>) =>
+        container.attr("transform", (event.transform as d3.ZoomTransform).toString())
+      )
   );
 
   // Simulation
-  const simulation = d3
+  const sim = d3
     .forceSimulation<SimNode>(allNodes)
     .force(
       "link",
@@ -196,146 +205,151 @@ function renderGraph(
         .distance((e) => 120 + (1 - e.strength) * 80)
         .strength((e) => e.strength * 0.4)
     )
-    .force("charge", d3.forceManyBody<SimNode>().strength(-320))
+    .force("charge", d3.forceManyBody<SimNode>().strength(-340))
     .force("center", d3.forceCenter(W / 2, H / 2))
-    .force("collision", d3.forceCollide<SimNode>().radius((d) => nodeRadius(d) + 12));
+    .force(
+      "collision",
+      d3.forceCollide<SimNode>().radius((d) => nodeRadius(d) + 14)
+    );
 
-  // ── Draw edges ──────────────────────────────────────────────────────────────
-  const linkG = container.append("g").attr("class", "links");
-  const linkEl = linkG
+  // ── Edges ────────────────────────────────────────────────────────────────────
+  const linkSel = container
+    .append("g")
     .selectAll<SVGLineElement, SimEdge>("line")
     .data(allEdges)
     .join("line")
-    .attr("stroke", (d) => EDGE_COLORS[d.relationship] ?? "#999")
+    .attr("stroke", (d) => EDGE_COLORS[d.relationship])
     .attr("stroke-width", (d) => 1.5 + d.strength * 3)
     .attr("stroke-opacity", 0.7)
     .attr("marker-end", (d) => `url(#arrow-${d.relationship})`)
     .style("cursor", "pointer")
-    .on("mouseover", (_event, d) => onHoverEdge(d.note))
+    .on("mouseover", (_: MouseEvent, d: SimEdge) => onHoverEdge(d.note))
     .on("mouseout", () => onHoverEdge(null));
 
-  // ── Draw nodes ──────────────────────────────────────────────────────────────
-  const nodeG = container.append("g").attr("class", "nodes");
-  const nodeEl = nodeG
+  // ── Nodes ────────────────────────────────────────────────────────────────────
+  const nodeSel = container
+    .append("g")
     .selectAll<SVGGElement, SimNode>("g")
     .data(allNodes)
     .join("g")
-    .attr("class", "node")
     .style("cursor", "pointer")
     .call(
       d3
         .drag<SVGGElement, SimNode>()
-        .on("start", (event, d) => {
-          if (!event.active) simulation.alphaTarget(0.3).restart();
+        .on("start", (event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => {
+          if (!event.active) sim.alphaTarget(0.3).restart();
           if (!d.isThesis) { d.fx = d.x; d.fy = d.y; }
         })
-        .on("drag", (event, d) => {
+        .on("drag", (event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => {
           if (!d.isThesis) { d.fx = event.x; d.fy = event.y; }
         })
-        .on("end", (event, d) => {
-          if (!event.active) simulation.alphaTarget(0);
+        .on("end", (event: d3.D3DragEvent<SVGGElement, SimNode, SimNode>, d: SimNode) => {
+          if (!event.active) sim.alphaTarget(0);
           if (!d.isThesis) { d.fx = null; d.fy = null; }
         })
     );
 
-  // Circles or star
-  nodeEl.each(function (d) {
-    const el = d3.select(this);
+  // Shapes
+  nodeSel.each(function (d: SimNode) {
+    const g = d3.select(this);
     if (d.isThesis) {
-      el.append("path")
+      g.append("path")
         .attr("d", starPath(nodeRadius(d)))
         .attr("fill", "#f59e0b")
         .attr("stroke", "#92400e")
         .attr("stroke-width", 2)
-        .attr("filter", "drop-shadow(0 2px 4px rgba(245,158,11,0.5))");
+        .style("filter", "drop-shadow(0 2px 4px rgba(245,158,11,0.4))");
     } else {
-      el.append("circle")
+      g.append("circle")
         .attr("r", nodeRadius(d))
         .attr("fill", clusterColor(d.cluster))
-        .attr("fill-opacity", 0.85)
+        .attr("fill-opacity", 0.88)
         .attr("stroke", "#fff")
         .attr("stroke-width", 2)
-        .attr("filter", "drop-shadow(0 1px 3px rgba(0,0,0,0.2))");
+        .style("filter", "drop-shadow(0 1px 3px rgba(0,0,0,0.18))");
     }
   });
 
-  // Label
-  nodeEl
+  // Labels
+  nodeSel
     .append("text")
-    .text((d) => (d.isThesis ? "★ Thesis" : d.label.slice(0, 20)))
+    .text((d: SimNode) => (d.isThesis ? "★ Thesis" : d.label.slice(0, 22)))
     .attr("text-anchor", "middle")
-    .attr("dy", (d) => nodeRadius(d) + 13)
-    .attr("font-size", "10px")
+    .attr("dy", (d: SimNode) => nodeRadius(d) + 13)
+    .attr("font-size", "10")
     .attr("fill", "#444")
     .attr("pointer-events", "none")
     .style("user-select", "none");
 
-  // Node interactions
-  nodeEl
-    .on("mouseover", (event, d) => {
+  // Hover tooltip
+  nodeSel
+    .on("mouseover", (event: MouseEvent, d: SimNode) => {
       const item = itemMap.get(d.id);
-      const snippet = item
-        ? (item.originalSnippet ?? item.abstract ?? item.paraphrase ?? "").slice(0, 150)
-        : d.isThesis
-        ? data.thesisNode.positioning
-        : "";
-      const title = item ? item.title : d.isThesis ? "Your thesis statement" : d.label;
       const rect = svgEl.getBoundingClientRect();
       onTooltip({
         x: event.clientX - rect.left,
         y: event.clientY - rect.top,
-        title,
-        snippet,
+        title: item ? item.title : d.isThesis ? "Your thesis statement" : d.label,
+        snippet: item
+          ? (item.originalSnippet ?? item.abstract ?? item.paraphrase ?? "").slice(0, 150)
+          : d.isThesis
+          ? data.thesisNode.positioning
+          : "",
       });
     })
-    .on("mousemove", (event) => {
+    .on("mousemove", (event: MouseEvent) => {
       const rect = svgEl.getBoundingClientRect();
-      onTooltip((prev) => prev ? { ...prev, x: event.clientX - rect.left, y: event.clientY - rect.top } : null);
+      onTooltip((prev) =>
+        prev ? { ...prev, x: event.clientX - rect.left, y: event.clientY - rect.top } : null
+      );
     })
-    .on("mouseout", () => onTooltip(null))
-    .on("click", (_event, d) => {
-      // Collect edges for this node
-      const nodeEdges = data.edges.filter(
-        (e) => e.source === d.id || e.target === d.id
-      );
-      // Include thesis edge
-      if (d.id === "thesis" && thesisEdge) nodeEdges.push({ ...thesisEdge, source: thesisEdge._source, target: thesisEdge._target });
+    .on("mouseout", () => onTooltip(null));
 
-      // Highlight
-      linkEl.attr("stroke-opacity", (e) =>
-        e._source === d.id || e._target === d.id ? 1 : 0.1
+  // Click — highlight + side panel
+  nodeSel.on("click", (_: MouseEvent, d: SimNode) => {
+    const nodeEdges = data.edges.filter((e) => e.source === d.id || e.target === d.id);
+    if (d.isThesis) {
+      thesisEdges.forEach((te) =>
+        nodeEdges.push({ ...te, source: te.srcId, target: te.tgtId })
       );
-      nodeEl.select("circle,path").attr("fill-opacity", (n) => {
+    }
+
+    linkSel.attr("stroke-opacity", (e: SimEdge) =>
+      e.srcId === d.id || e.tgtId === d.id ? 1 : 0.1
+    );
+    nodeSel
+      .select("circle, path")
+      .attr("fill-opacity", (n: SimNode) => {
         if (n.id === d.id) return 1;
         const connected = allEdges.some(
-          (e) => (e._source === d.id && e._target === n.id) || (e._target === d.id && e._source === n.id)
+          (e) => (e.srcId === d.id && e.tgtId === n.id) || (e.tgtId === d.id && e.srcId === n.id)
         );
-        return connected ? 0.85 : 0.2;
+        return connected ? 0.88 : 0.18;
       });
 
-      onSelectNode(d.id, nodeEdges);
-    });
+    onSelectNode(d.id, nodeEdges);
+  });
 
-  // Click background to deselect
-  svg.on("click", (event) => {
-    if ((event.target as SVGElement) === svgEl) {
-      linkEl.attr("stroke-opacity", 0.7);
-      nodeEl.select("circle,path").attr("fill-opacity", (d) => (d.isThesis ? 1 : 0.85));
+  // Click background → deselect
+  svg.on("click", (event: MouseEvent) => {
+    if (event.target === svgEl) {
+      linkSel.attr("stroke-opacity", 0.7);
+      nodeSel.select("circle, path").attr("fill-opacity", 0.88);
       onSelectNode(null, []);
     }
   });
 
   // Tick
-  simulation.on("tick", () => {
-    linkEl
-      .attr("x1", (d) => (d.source as SimNode).x ?? 0)
-      .attr("y1", (d) => (d.source as SimNode).y ?? 0)
-      .attr("x2", (d) => (d.target as SimNode).x ?? 0)
-      .attr("y2", (d) => (d.target as SimNode).y ?? 0);
-    nodeEl.attr("transform", (d) => `translate(${d.x ?? 0},${d.y ?? 0})`);
+  sim.on("tick", () => {
+    linkSel
+      .attr("x1", (d: SimEdge) => (d.source as SimNode).x ?? 0)
+      .attr("y1", (d: SimEdge) => (d.source as SimNode).y ?? 0)
+      .attr("x2", (d: SimEdge) => (d.target as SimNode).x ?? 0)
+      .attr("y2", (d: SimEdge) => (d.target as SimNode).y ?? 0);
+    nodeSel.attr("transform", (d: SimNode) => `translate(${d.x ?? 0},${d.y ?? 0})`);
   });
 
-  return () => simulation.stop();
+  return () => sim.stop();
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -351,15 +365,13 @@ export function ArgumentMapper() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdges, setSelectedEdges] = useState<ArgEdge[]>([]);
   const [hoveredEdgeNote, setHoveredEdgeNote] = useState<string | null>(null);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; title: string; snippet: string } | null>(null);
+  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
 
   const count = items.length;
   const isUnlocked = count >= MIN_ITEMS;
-
-  // Map collection items by ID for tooltip lookups
   const itemMap = new Map(items.map((i) => [i.id, i]));
 
   const handleSelectNode = useCallback((id: string | null, edges: ArgEdge[]) => {
@@ -367,7 +379,7 @@ export function ArgumentMapper() {
     setSelectedEdges(edges);
   }, []);
 
-  // Run D3 whenever data arrives
+  // Re-render graph when data changes
   useEffect(() => {
     if (!data || !svgRef.current) return;
     cleanupRef.current?.();
@@ -379,8 +391,8 @@ export function ArgumentMapper() {
       setHoveredEdgeNote,
       setTooltip
     );
-    cleanupRef.current = stop ?? null;
-    return () => stop?.();
+    cleanupRef.current = stop;
+    return stop;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
@@ -409,7 +421,7 @@ export function ArgumentMapper() {
       });
       const json = await resp.json();
       if (!resp.ok) {
-        setError(json.error ?? "Analysis failed. Please try again.");
+        setError((json as { error: string }).error ?? "Analysis failed.");
         return;
       }
       setData(json as ArgMapResult);
@@ -426,7 +438,6 @@ export function ArgumentMapper() {
     const W = svgEl.clientWidth;
     const H = svgEl.clientHeight;
     const serializer = new XMLSerializer();
-    // Inline styles needed for standalone SVG
     const svgStr = serializer.serializeToString(svgEl);
     const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -435,30 +446,27 @@ export function ArgumentMapper() {
       const canvas = document.createElement("canvas");
       canvas.width = W * 2;
       canvas.height = H * 2;
-      const ctx = canvas.getContext("2d")!;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
       ctx.scale(2, 2);
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(0, 0, W, H);
       ctx.drawImage(img, 0, 0, W, H);
       URL.revokeObjectURL(url);
-      const png = canvas.toDataURL("image/png");
       const a = document.createElement("a");
-      a.download = `ScholarForge-ArgumentMap-${new Date().toISOString().slice(0, 10)}.png`;
-      a.href = png;
+      a.download = `ScholarForge-ArgMap-${new Date().toISOString().slice(0, 10)}.png`;
+      a.href = canvas.toDataURL("image/png");
       a.click();
     };
     img.src = url;
   };
 
   const contradictions = data?.edges.filter((e) => e.relationship === "contradicts") ?? [];
-  const selectedNode = selectedNodeId
-    ? data?.nodes.find((n) => n.id === selectedNodeId) ??
-      (selectedNodeId === "thesis" ? { id: "thesis", label: "Your Thesis", cluster: "", centrality: 1 } : null)
-    : null;
-  const selectedItem = selectedNodeId ? itemMap.get(selectedNodeId) : null;
+  const selectedItem = selectedNodeId ? itemMap.get(selectedNodeId) : undefined;
+  const selectedArgNode = data?.nodes.find((n) => n.id === selectedNodeId);
   const thesisSelected = selectedNodeId === "thesis";
 
-  // ── Locked state ─────────────────────────────────────────────────────────────
+  // ── Locked ────────────────────────────────────────────────────────────────────
   if (!isUnlocked) {
     return (
       <div className="rounded-2xl border border-dashed bg-muted/30 p-8 space-y-5 text-center max-w-2xl mx-auto">
@@ -466,9 +474,9 @@ export function ArgumentMapper() {
           <Network className="h-7 w-7 text-violet-600/50" />
         </div>
         <div>
-          <h3 className="font-serif text-xl text-foreground">Argument Mapper</h3>
+          <h3 className="font-serif text-xl">Argument Mapper</h3>
           <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-            Collect {MIN_ITEMS} papers to visualize how they relate to each other and your thesis.
+            Collect {MIN_ITEMS} papers to visualise how they relate to each other and your thesis.
           </p>
         </div>
         <div className="space-y-2">
@@ -496,7 +504,7 @@ export function ArgumentMapper() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="font-serif text-xl text-foreground flex items-center gap-2">
+          <h2 className="font-serif text-xl flex items-center gap-2">
             <Network className="h-5 w-5 text-violet-600" />
             Argument Mapper
           </h2>
@@ -548,7 +556,7 @@ export function ArgumentMapper() {
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
           <p className="text-sm text-violet-700 font-medium animate-pulse">
-            Analyzing intellectual relationships…
+            Analysing intellectual relationships…
           </p>
         </div>
       )}
@@ -556,13 +564,12 @@ export function ArgumentMapper() {
       {/* Graph + side panel */}
       {data && !loading && (
         <div className="flex gap-4">
-          {/* SVG */}
-          <div className="relative flex-1 rounded-2xl border bg-white overflow-hidden" style={{ minHeight: 520 }}>
-            <svg
-              ref={svgRef}
-              className="w-full h-full"
-              style={{ minHeight: 520 }}
-            />
+          {/* SVG canvas */}
+          <div
+            className="relative flex-1 rounded-2xl border bg-white overflow-hidden"
+            style={{ minHeight: 520 }}
+          >
+            <svg ref={svgRef} className="w-full" style={{ minHeight: 520 }} />
 
             {/* Hover tooltip */}
             {tooltip && (
@@ -573,8 +580,10 @@ export function ArgumentMapper() {
                   top: Math.max(tooltip.y - 60, 10),
                 }}
               >
-                <p className="font-semibold text-foreground leading-snug mb-1 line-clamp-2">{tooltip.title}</p>
-                {tooltip.snippet && <p className="text-muted-foreground leading-snug line-clamp-3">{tooltip.snippet}…</p>}
+                <p className="font-semibold leading-snug mb-1 line-clamp-2">{tooltip.title}</p>
+                {tooltip.snippet && (
+                  <p className="text-muted-foreground leading-snug line-clamp-3">{tooltip.snippet}…</p>
+                )}
               </div>
             )}
 
@@ -588,25 +597,23 @@ export function ArgumentMapper() {
 
           {/* Side panel */}
           <div className="w-64 shrink-0 space-y-3">
-            {!selectedNode && (
+            {!selectedNodeId && (
               <div className="rounded-xl border border-dashed bg-muted/20 p-4 text-center space-y-2">
                 <Network className="h-6 w-6 text-muted-foreground/30 mx-auto" />
                 <p className="text-xs text-muted-foreground">Click a node to see its relationships</p>
               </div>
             )}
 
-            {selectedNode && (
+            {selectedNodeId && (
               <div className="rounded-xl border bg-card p-4 space-y-3">
                 <div>
-                  {thesisSelected ? (
-                    <div className="text-base">★</div>
-                  ) : (
-                    <Badge variant="outline" className="text-[10px] mb-1">{selectedNode.cluster}</Badge>
+                  {!thesisSelected && selectedArgNode && (
+                    <Badge variant="outline" className="text-[10px] mb-1">{selectedArgNode.cluster}</Badge>
                   )}
-                  <p className="font-semibold text-sm text-foreground leading-snug">
+                  <p className="font-semibold text-sm leading-snug">
                     {thesisSelected
-                      ? "Your Thesis"
-                      : selectedItem?.title ?? selectedNode.label}
+                      ? "★ Your Thesis"
+                      : selectedItem?.title ?? selectedArgNode?.label ?? selectedNodeId}
                   </p>
                   {!thesisSelected && selectedItem && (
                     <p className="text-[11px] text-muted-foreground mt-0.5">
@@ -633,7 +640,7 @@ export function ArgumentMapper() {
                       const isOutgoing = e.source === selectedNodeId;
                       return (
                         <div key={i} className="rounded-lg bg-muted/40 px-2.5 py-2 space-y-1">
-                          <div className="flex items-center gap-1.5 text-[10px]">
+                          <div className="flex items-center gap-1.5 text-[10px] flex-wrap">
                             <span
                               className="w-2 h-2 rounded-full shrink-0"
                               style={{ background: EDGE_COLORS[e.relationship] }}
@@ -642,7 +649,7 @@ export function ArgumentMapper() {
                               {isOutgoing ? "→" : "←"} {EDGE_LABELS[e.relationship]}
                             </span>
                             <span className="text-muted-foreground truncate">
-                              {otherNode?.label ?? otherId}
+                              {otherNode?.label ?? String(otherId)}
                             </span>
                           </div>
                           <p className="text-[10px] text-muted-foreground leading-snug">{e.note}</p>
@@ -680,10 +687,7 @@ export function ArgumentMapper() {
           <div className="flex flex-wrap gap-x-5 gap-y-2">
             {(Object.entries(EDGE_LABELS) as [RelType, string][]).map(([rel, label]) => (
               <div key={rel} className="flex items-center gap-2 text-xs">
-                <span
-                  className="h-0.5 w-6 rounded-full inline-block"
-                  style={{ background: EDGE_COLORS[rel] }}
-                />
+                <span className="h-0.5 w-6 rounded-full inline-block" style={{ background: EDGE_COLORS[rel] }} />
                 <span className="text-foreground/70">{label}</span>
               </div>
             ))}
