@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef } from "react";
 import {
   DndContext,
   closestCenter,
@@ -28,22 +28,15 @@ import {
   ChevronDown,
   BookOpen,
   Check,
-  Clipboard,
-  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useCollection, type CollectionItem } from "@/hooks/useCollection";
 import { useSupervisor } from "@/hooks/useSupervisor";
 import { ParaphrasePanel } from "@/components/ParaphrasePanel";
 import { CitationDisplay } from "@/components/CitationDisplay";
+import { ExportModal } from "@/components/ExportModal";
 import type { Paper } from "@workspace/api-client-react/src/generated/api.schemas";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -362,247 +355,6 @@ function SortableCollectionCard({
   );
 }
 
-// ─── Export bibliography dialog ───────────────────────────────────────────────
-
-function ExportDialog({
-  items,
-  style,
-  open,
-  onOpenChange,
-}: {
-  items: CollectionItem[];
-  style: string;
-  open: boolean;
-  onOpenChange: (o: boolean) => void;
-}) {
-  const [citations, setCitations] = useState<string[]>([]);
-  const [bibtex, setBibtex] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [bibtexCopied, setBibtexCopied] = useState(false);
-
-  const fetchAll = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const doiItems = items.filter((i) => i.doi);
-      const noDOIItems = items.filter((i) => !i.doi);
-
-      const allCitations: string[] = new Array(items.length).fill("");
-      const bibtexParts: string[] = [];
-
-      // Batch fetch for DOI items
-      if (doiItems.length > 0) {
-        const query = doiItems
-          .map((i) => `dois=${encodeURIComponent(i.doi!)}`)
-          .join("&");
-        const resp = await fetch(`/api/cite/batch?${query}&style=${style}`);
-        if (resp.ok) {
-          const data = await resp.json();
-          doiItems.forEach((item, idx) => {
-            const pos = items.findIndex((i) => i.id === item.id);
-            if (pos !== -1) allCitations[pos] = data.citations?.[idx] ?? "";
-          });
-          if (data.bibtex) bibtexParts.push(data.bibtex);
-        }
-      }
-
-      // Individual fetch for non-DOI items
-      await Promise.all(
-        noDOIItems.map(async (item) => {
-          try {
-            const resp = await fetch("/api/cite", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                metadata: {
-                  title: item.title,
-                  authors: item.authors,
-                  year: item.year?.toString(),
-                  journal: item.journal,
-                },
-              }),
-            });
-            if (resp.ok) {
-              const data = await resp.json();
-              const pos = items.findIndex((i) => i.id === item.id);
-              if (pos !== -1)
-                allCitations[pos] =
-                  data.formatted?.[style] ?? data.formatted?.apa ?? "";
-              if (data.bibtex) bibtexParts.push(data.bibtex);
-            }
-          } catch {
-            // skip failed items
-          }
-        })
-      );
-
-      setCitations(allCitations.filter(Boolean));
-      setBibtex(bibtexParts.join("\n\n").trim());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Export failed.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (open) fetchAll();
-    else {
-      setCitations([]);
-      setBibtex("");
-      setCopied(false);
-      setBibtexCopied(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  const downloadFile = (content: string, filename: string, mime: string) => {
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const allText = citations.join("\n\n");
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
-        <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0">
-          <DialogTitle className="font-serif text-lg flex items-center gap-2">
-            <Download className="h-4 w-4 text-emerald-700" />
-            Export Bibliography
-          </DialogTitle>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {items.length} item{items.length !== 1 ? "s" : ""} ·{" "}
-            {style.toUpperCase()} format
-          </p>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {loading && (
-            <div className="flex items-center justify-center py-10 gap-3 text-sm text-muted-foreground">
-              <svg className="animate-spin h-5 w-5 text-emerald-700" viewBox="0 0 24 24" fill="none">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
-              Fetching citations…
-            </div>
-          )}
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          {!loading && citations.length > 0 && (
-            <div className="space-y-4">
-              {/* Formatted citations */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Formatted citations
-                  </p>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(allText).then(() => {
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                      });
-                    }}
-                    className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {copied ? (
-                      <><ClipboardCheck className="h-3 w-3 text-emerald-600" /> Copied!</>
-                    ) : (
-                      <><Clipboard className="h-3 w-3" /> Copy all</>
-                    )}
-                  </button>
-                </div>
-                <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-                  {citations.map((c, i) => (
-                    <p key={i} className="text-sm leading-relaxed border-b border-border/50 pb-3 last:border-0 last:pb-0">
-                      {c}
-                    </p>
-                  ))}
-                </div>
-              </div>
-
-              {/* BibTeX */}
-              {bibtex && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      BibTeX
-                    </p>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(bibtex).then(() => {
-                          setBibtexCopied(true);
-                          setTimeout(() => setBibtexCopied(false), 2000);
-                        });
-                      }}
-                      className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {bibtexCopied ? (
-                        <><ClipboardCheck className="h-3 w-3 text-emerald-600" /> Copied!</>
-                      ) : (
-                        <><Clipboard className="h-3 w-3" /> Copy</>
-                      )}
-                    </button>
-                  </div>
-                  <pre className="text-[11px] font-mono bg-zinc-950 text-zinc-100 rounded-lg p-4 overflow-x-auto whitespace-pre-wrap max-h-48">
-                    {bibtex}
-                  </pre>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="px-6 py-3.5 border-t bg-muted/20 shrink-0 flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => downloadFile(allText, "bibliography.txt", "text/plain")}
-            disabled={loading || citations.length === 0}
-            className="gap-1.5 text-xs"
-          >
-            <Download className="h-3.5 w-3.5" />
-            Download .txt
-          </Button>
-          {bibtex && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => downloadFile(bibtex, "bibliography.bib", "application/x-bibtex")}
-              disabled={loading}
-              className="gap-1.5 text-xs"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Download .bib
-            </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto text-xs"
-            onClick={() => onOpenChange(false)}
-          >
-            Close
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function CollectionWorkspace() {
@@ -847,12 +599,13 @@ export function CollectionWorkspace() {
         />
       )}
 
-      {/* ── Export dialog ── */}
-      <ExportDialog
+      {/* ── Export modal ── */}
+      <ExportModal
         items={items}
-        style={style}
         open={exportOpen}
         onOpenChange={setExportOpen}
+        defaultStyle={config?.citationStyle}
+        universityName={config?.universityName}
       />
     </div>
   );

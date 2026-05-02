@@ -15,8 +15,22 @@ import {
   ClipboardCheck,
   RefreshCw,
 } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import type { CollectionItem } from "@/hooks/useCollection";
+
+// ─── Browser download helper ──────────────────────────────────────────────────
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
