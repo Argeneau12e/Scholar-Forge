@@ -11,9 +11,15 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { useCollection } from "@/hooks/useCollection";
+import { useCollection, type CollectionItem } from "@/hooks/useCollection";
 import { ParaphrasePanel } from "@/components/ParaphrasePanel";
 import { CitationDisplay } from "@/components/CitationDisplay";
 import type { Paper } from "@workspace/api-client-react/src/generated/api.schemas";
@@ -142,11 +148,12 @@ export function SnippetCard({
   supervisorConfig,
 }: SnippetCardProps) {
   const { toast } = useToast();
-  const { addFromPaper, isInCollection } = useCollection();
+  const { addFromPaper, addFromPaperForce, isInCollection } = useCollection();
 
   const [abstractExpanded, setAbstractExpanded] = useState(false);
   const [paraphraseOpen, setParaphraseOpen] = useState(false);
   const [citeOpen, setCiteOpen] = useState(false);
+  const [duplicatePaper, setDuplicatePaper] = useState<CollectionItem | null>(null);
 
   const saved = isInCollection(paper.id);
   const compliance = getCompliance(paper, supervisorConfig);
@@ -158,12 +165,20 @@ export function SnippetCard({
       : paper.abstract ?? "";
 
   const handleSave = () => {
-    const { added, total } = addFromPaper(paper);
-    if (added) {
-      toast({ title: `Added to your collection (${total} total)` });
+    const result = addFromPaper(paper);
+    if (result.added) {
+      toast({ title: `Added to your collection (${result.total} total)` });
+    } else if (result.duplicate) {
+      setDuplicatePaper(result.duplicate);
     } else {
       toast({ title: "Already in your collection" });
     }
+  };
+
+  const handleForceAdd = () => {
+    const { total } = addFromPaperForce(paper);
+    setDuplicatePaper(null);
+    toast({ title: `Added another snippet (${total} total)` });
   };
 
   return (
@@ -375,6 +390,44 @@ export function SnippetCard({
         open={citeOpen}
         onOpenChange={setCiteOpen}
       />
+
+      {/* Duplicate detection modal */}
+      <Dialog
+        open={!!duplicatePaper}
+        onOpenChange={(o) => !o && setDuplicatePaper(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-base leading-snug">
+              Already in your collection
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            You already have{" "}
+            <span className="font-medium text-foreground">
+              "{duplicatePaper?.title}"
+            </span>{" "}
+            in your collection. Add another snippet from this paper or cancel?
+          </p>
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              size="sm"
+              className="bg-emerald-700 hover:bg-emerald-800 text-white flex-1"
+              onClick={handleForceAdd}
+            >
+              Add another snippet
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setDuplicatePaper(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

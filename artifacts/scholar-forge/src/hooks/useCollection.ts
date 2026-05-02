@@ -8,24 +8,49 @@ export interface CollectionItem {
   title: string;
   authors: string[];
   year?: number | null;
-  venue?: string | null;
+  journal?: string | null;
+  doi?: string | null;
   url?: string | null;
   abstract?: string | null;
-  doi?: string | null;
   openAccess?: boolean | null;
   source?: string | null;
   snippets?: PaperSnippet[];
-  rawText?: string;
-  paraphrasedText?: string;
-  citationInline?: string;
-  kind?: "paper" | "paste" | "paraphrase";
-  savedAt: string;
+  originalSnippet?: string | null;
+  paraphrase?: string | null;
+  citationInline?: string | null;
+  citation?: {
+    apa?: string;
+    vancouver?: string;
+    harvard?: string;
+    mla?: string;
+    chicago?: string;
+  };
+  tags: string[];
+  supervisorCompliant?: boolean;
+  kind: "paper" | "paste" | "paraphrase";
+  addedAt: string;
+  savedAt?: string;
+  order: number;
+}
+
+function generateId(): string {
+  return `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function readCollection(): CollectionItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as CollectionItem[]) : [];
+    if (!raw) return [];
+    const items = JSON.parse(raw) as CollectionItem[];
+    // Migrate older items that are missing new fields
+    return items.map((item, idx) => ({
+      tags: [],
+      order: idx,
+      paraphrase: "",
+      ...item,
+      addedAt: item.addedAt ?? item.savedAt ?? new Date().toISOString(),
+      kind: item.kind ?? "paper",
+    }));
   } catch {
     return [];
   }
@@ -38,29 +63,45 @@ function writeCollection(items: CollectionItem[]): void {
 export function useCollection() {
   const [items, setItems] = useState<CollectionItem[]>(() => readCollection());
 
+  // ── add from search result ─────────────────────────────────────────────────
   const addFromPaper = useCallback(
-    (paper: Paper): { added: boolean; total: number } => {
+    (paper: Paper): { added: boolean; total: number; duplicate?: CollectionItem } => {
       const current = readCollection();
-      const alreadyIn = current.some((c) => c.id === paper.id);
-      if (alreadyIn) return { added: false, total: current.length };
+
+      // Exact ID match → silently already-saved
+      if (current.some((c) => c.id === paper.id)) {
+        return { added: false, total: current.length };
+      }
+
+      // DOI or title match (different ID) → duplicate modal trigger
+      const dup = current.find(
+        (c) =>
+          (paper.doi && c.doi && c.doi === paper.doi) ||
+          c.title.trim().toLowerCase() === paper.title.trim().toLowerCase()
+      );
+      if (dup) return { added: false, total: current.length, duplicate: dup };
 
       const item: CollectionItem = {
-        id: paper.id,
+        id: paper.id || generateId(),
         kind: "paper",
         title: paper.title,
         authors: paper.authors,
         year: paper.year,
-        venue: paper.venue,
+        journal: paper.venue,
         url: paper.url,
         abstract: paper.abstract,
         doi: paper.doi,
         openAccess: paper.openAccess,
         source: paper.source,
         snippets: paper.snippets,
-        savedAt: new Date().toISOString(),
+        originalSnippet: paper.snippets?.[0]?.text ?? paper.abstract ?? "",
+        paraphrase: "",
+        tags: [],
+        addedAt: new Date().toISOString(),
+        order: 0,
       };
 
-      const next = [item, ...current];
+      const next = [item, ...current.map((c) => ({ ...c, order: c.order + 1 }))];
       writeCollection(next);
       setItems(next);
       return { added: true, total: next.length };
@@ -68,21 +109,55 @@ export function useCollection() {
     []
   );
 
+  // ── force-add (used after user confirms duplicate modal) ──────────────────
+  const addFromPaperForce = useCallback(
+    (paper: Paper): { added: boolean; total: number } => {
+      const current = readCollection();
+      const item: CollectionItem = {
+        id: `${paper.id}_${Date.now()}`,
+        kind: "paper",
+        title: paper.title,
+        authors: paper.authors,
+        year: paper.year,
+        journal: paper.venue,
+        url: paper.url,
+        abstract: paper.abstract,
+        doi: paper.doi,
+        openAccess: paper.openAccess,
+        source: paper.source,
+        snippets: paper.snippets,
+        originalSnippet: paper.snippets?.[0]?.text ?? paper.abstract ?? "",
+        paraphrase: "",
+        tags: [],
+        addedAt: new Date().toISOString(),
+        order: 0,
+      };
+      const next = [item, ...current.map((c) => ({ ...c, order: c.order + 1 }))];
+      writeCollection(next);
+      setItems(next);
+      return { added: true, total: next.length };
+    },
+    []
+  );
+
+  // ── paste raw snippet ─────────────────────────────────────────────────────
   const addRawSnippet = useCallback(
     (rawText: string, doi: string): { added: boolean; total: number } => {
       if (!rawText.trim()) return { added: false, total: readCollection().length };
       const current = readCollection();
-      const id = `paste_${Date.now()}`;
       const item: CollectionItem = {
-        id,
+        id: generateId(),
         kind: "paste",
         title: doi.trim() ? `DOI: ${doi.trim()}` : "Pasted snippet",
         authors: [],
         doi: doi.trim() || null,
-        rawText: rawText.trim(),
-        savedAt: new Date().toISOString(),
+        originalSnippet: rawText.trim(),
+        paraphrase: "",
+        tags: [],
+        addedAt: new Date().toISOString(),
+        order: 0,
       };
-      const next = [item, ...current];
+      const next = [item, ...current.map((c) => ({ ...c, order: c.order + 1 }))];
       writeCollection(next);
       setItems(next);
       return { added: true, total: next.length };
@@ -90,6 +165,7 @@ export function useCollection() {
     []
   );
 
+  // ── save paraphrase ───────────────────────────────────────────────────────
   const addParaphrase = useCallback(
     (
       paraphrasedText: string,
@@ -98,21 +174,23 @@ export function useCollection() {
     ): { added: boolean; total: number } => {
       if (!paraphrasedText.trim()) return { added: false, total: readCollection().length };
       const current = readCollection();
-      const id = `paraphrase_${paper.id}_${Date.now()}`;
       const item: CollectionItem = {
-        id,
+        id: `paraphrase_${paper.id}_${Date.now()}`,
         kind: "paraphrase",
         title: paper.title,
         authors: paper.authors,
         year: paper.year,
-        venue: paper.venue,
+        journal: paper.venue,
         url: paper.url,
         doi: paper.doi,
-        paraphrasedText: paraphrasedText.trim(),
+        originalSnippet: paper.snippets?.[0]?.text ?? paper.abstract ?? "",
+        paraphrase: paraphrasedText.trim(),
         citationInline,
-        savedAt: new Date().toISOString(),
+        tags: [],
+        addedAt: new Date().toISOString(),
+        order: 0,
       };
-      const next = [item, ...current];
+      const next = [item, ...current.map((c) => ({ ...c, order: c.order + 1 }))];
       writeCollection(next);
       setItems(next);
       return { added: true, total: next.length };
@@ -120,16 +198,62 @@ export function useCollection() {
     []
   );
 
+  // ── update arbitrary fields on an item ────────────────────────────────────
+  const updateItem = useCallback((id: string, changes: Partial<CollectionItem>) => {
+    const current = readCollection();
+    const next = current.map((c) => (c.id === id ? { ...c, ...changes } : c));
+    writeCollection(next);
+    setItems(next);
+  }, []);
+
+  // ── persist a new ordering ────────────────────────────────────────────────
+  const reorder = useCallback((orderedIds: string[]) => {
+    const current = readCollection();
+    const byId = new Map(current.map((c) => [c.id, c]));
+    const next = orderedIds
+      .map((id, idx) => {
+        const item = byId.get(id);
+        return item ? { ...item, order: idx } : null;
+      })
+      .filter(Boolean) as CollectionItem[];
+    // append any orphaned items (shouldn't happen, but defensive)
+    current.forEach((c) => {
+      if (!orderedIds.includes(c.id)) next.push(c);
+    });
+    writeCollection(next);
+    setItems(next);
+  }, []);
+
+  // ── check presence by id ──────────────────────────────────────────────────
   const isInCollection = useCallback(
     (id: string): boolean => readCollection().some((c) => c.id === id),
     []
   );
 
+  // ── remove ────────────────────────────────────────────────────────────────
   const remove = useCallback((id: string) => {
-    const current = readCollection().filter((c) => c.id !== id);
-    writeCollection(current);
-    setItems(current);
+    const next = readCollection().filter((c) => c.id !== id);
+    writeCollection(next);
+    setItems(next);
   }, []);
 
-  return { items, addFromPaper, addRawSnippet, addParaphrase, isInCollection, remove };
+  // ── all tags used across the collection ────────────────────────────────────
+  const getAllTags = useCallback((): string[] => {
+    const set = new Set<string>();
+    readCollection().forEach((item) => (item.tags ?? []).forEach((t) => set.add(t)));
+    return Array.from(set).sort();
+  }, []);
+
+  return {
+    items,
+    addFromPaper,
+    addFromPaperForce,
+    addRawSnippet,
+    addParaphrase,
+    updateItem,
+    reorder,
+    isInCollection,
+    remove,
+    getAllTags,
+  };
 }
