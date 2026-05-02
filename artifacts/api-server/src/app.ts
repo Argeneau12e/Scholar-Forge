@@ -52,7 +52,7 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-for (const p of ["/api/paraphrase", "/api/gaps", "/api/litreview", "/api/coach", "/api/argmap"]) {
+for (const p of ["/api/paraphrase", "/api/gaps", "/api/litreview", "/api/coach", "/api/argmap", "/api/plagiarism"]) {
   app.use(p, concurrentRequestLimit);
 }
 app.use("/api", router);

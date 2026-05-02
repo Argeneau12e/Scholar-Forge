@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { UserCog, Library, PenLine, ImagePlay, Moon, Sun, Github } from "lucide-react";
+import { UserCog, Library, PenLine, ImagePlay, Moon, Sun, Github, ShieldCheck } from "lucide-react";
 import { useGetActiveSupervisor } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { useCollection } from "@/hooks/useCollection";
@@ -75,6 +75,7 @@ export function TopNav() {
           </Link>
           {navLink("/coach", "Writing Coach", <PenLine className="h-3.5 w-3.5" />)}
           {navLink("/visuals", "Visual Sourcer", <ImagePlay className="h-3.5 w-3.5" />)}
+          {navLink("/originality", "Originality", <ShieldCheck className="h-3.5 w-3.5" />)}
         </nav>
 
         {/* Right side */}

@@ -1,0 +1,149 @@
+Expand ScholarForge's search backend to support 8 academic sources, 
+not just PubMed and Semantic Scholar.
+
+Create individual library files for each source in /server/lib/:
+
+1. /server/lib/openalex.js — PRIMARY SOURCE
+OpenAlex API (https://api.openalex.org) — no key required for 
+polite pool (add email to requests as ?mailto=your@email.com)
+
+searchOpenAlex(query, yearFrom, yearTo, page):
+GET https://api.openalex.org/works?search=[query]
+  &filter=publication_year:[yearFrom]-[yearTo],
+    open_access.is_oa:true
+  &per-page=20&page=[page]
+  &select=id,title,authorships,publication_year,primary_location,
+    abstract_inverted_index,cited_by_count,concepts,related_works,
+    referenced_works,doi
+  &mailto=scholarforge@email.com
+
+Convert abstract_inverted_index (OpenAlex's compressed format) 
+back to readable text:
+function reconstructAbstract(invertedIndex) {
+  if (!invertedIndex) return '';
+  const words = {};
+  for (const [word, positions] of Object.entries(invertedIndex)) {
+    positions.forEach(pos => words[pos] = word);
+  }
+  return Object.keys(words).sort((a,b) => a-b).map(k => words[k]).join(' ');
+}
+
+Return normalized result objects matching the existing schema.
+Also return: citedByCount, concepts (for related papers feature), 
+relatedWorkIds (for connected papers feature).
+
+2. /server/lib/europepmc.js
+Europe PMC REST API (https://www.ebi.ac.uk/europepmc/webservices/rest)
+
+searchEuropePMC(query, phrase, yearFrom, yearTo):
+GET https://www.ebi.ac.uk/europepmc/webservices/rest/search
+  ?query=[query] [phrase] OPEN_ACCESS:Y 
+    PUB_YEAR:[yearFrom TO yearTo]
+  &resultType=core&pageSize=20&format=json
+
+Full text search: for papers with fullTextUrl, fetch and extract 
+relevant paragraphs using the same phrase-matching logic as PubMed.
+
+3. /server/lib/core.js
+CORE API (https://api.core.ac.uk/v3) — requires free API key
+Add CORE_API_KEY to .env
+
+searchCORE(query, yearFrom, yearTo):
+POST https://api.core.ac.uk/v3/search/works
+Body: { q: query, filters: { yearPublished: { gte: yearFrom, 
+  lte: yearTo } }, limit: 20 }
+Header: Authorization: Bearer [CORE_API_KEY]
+
+Returns full text for many papers — use this for snippet extraction 
+when other sources only have abstracts.
+
+4. /server/lib/arxiv.js
+arXiv API (http://export.arxiv.org/api/query) — no key required
+
+searchArxiv(query, yearFrom, yearTo):
+GET http://export.arxiv.org/api/query
+  ?search_query=all:[query]&start=0&max_results=20
+Parse XML response (use xml2js).
+Filter by submittedDate year range.
+Full text available via PDF — skip full text for now, use abstract only.
+Mark all arXiv results with a "Preprint" badge (not peer reviewed).
+
+5. /server/lib/unpaywall.js
+Unpaywall API (https://api.unpaywall.org) — requires email, no key
+
+findFreeVersion(doi):
+GET https://api.unpaywall.org/v2/[doi]?email=scholarforge@email.com
+Returns: { is_oa: boolean, oa_locations: [{url, license, host_type}] }
+Pick the best_oa_location URL.
+
+Use this as a POST-PROCESSING step: after any search returns results 
+with DOIs, batch-call Unpaywall to find free PDF versions.
+Add a "Free PDF ↗" button to any card where Unpaywall returns a URL.
+
+6. /server/lib/doaj.js
+DOAJ API (https://doaj.org/api) — no key required
+
+searchDOAJ(query, yearFrom, yearTo):
+GET https://doaj.org/api/search/articles/[query]
+  ?_source=bibjson&pageSize=20
+Filter by year. Good for confirming a journal is genuinely open access.
+Use as a secondary source for verifying open-access status.
+
+7. /server/lib/base.js  
+BASE API (https://api.base-search.net) — no key required
+
+searchBASE(query, yearFrom, yearTo):
+GET https://api.base-search.net/cgi-bin/BaseHttpSearchInterface.fcgi
+  ?func=PerformSearch&query=[query]&hits=20&offset=0
+  &fields=dcTitle,dcCreator,dcDate,dcDescription,dcIdentifier
+  &format=json&filter=dcYear:[yearFrom TO yearTo]
+
+8. Update /server/routes/search.js:
+Replace the two-source system with a unified search orchestrator:
+
+async function searchAll(params) {
+  const { topic, phrase, yearFrom, yearTo, sources } = params;
+  
+  // Always query OpenAlex (fastest, broadest)
+  // Query PubMed only if discipline is biomedical
+  // Query arXiv only if discipline is CS/physics/math
+  // Query CORE for humanities/social sciences
+  // Query Europe PMC as supplement to PubMed
+  // Query BASE as broad fallback
+  
+  const results = await Promise.allSettled([
+    sources.includes('openalex') && searchOpenAlex(topic, yearFrom, yearTo),
+    sources.includes('pubmed') && searchPubMed(topic, phrase, yearFrom, yearTo),
+    sources.includes('europepmc') && searchEuropePMC(topic, phrase, yearFrom, yearTo),
+    sources.includes('core') && searchCORE(topic, yearFrom, yearTo),
+    sources.includes('arxiv') && searchArxiv(topic, yearFrom, yearTo),
+    sources.includes('base') && searchBASE(topic, yearFrom, yearTo),
+  ].filter(Boolean));
+  
+  // Collect fulfilled results, ignore failed sources gracefully
+  const allResults = results
+    .filter(r => r.status === 'fulfilled' && r.value)
+    .flatMap(r => r.value);
+  
+  // Deduplicate by DOI first, then by title similarity
+  const deduplicated = deduplicateResults(allResults);
+  
+  // Batch Unpaywall lookup for all DOIs
+  const withFreeLinks = await addFreeVersionLinks(deduplicated);
+  
+  // Sort: phrase match score > citation count > recency
+  return withFreeLinks.sort((a, b) => 
+    (b.matchScore - a.matchScore) || 
+    (b.citedByCount - a.citedByCount) || 
+    (b.year - a.year)
+  );
+}
+
+In the UI, update the source selector in SearchPanel:
+Replace the three-option radio with a multi-select chip group:
+[ OpenAlex ✓ ] [ PubMed ✓ ] [ Europe PMC ] [ CORE ] 
+[ arXiv ] [ DOAJ ] [ BASE ]
+OpenAlex and PubMed selected by default.
+Add tooltip on each: brief description of what that source covers.
+Add a "Best for my discipline" auto-selector that picks recommended 
+sources based on the supervisor's discipline setting.
