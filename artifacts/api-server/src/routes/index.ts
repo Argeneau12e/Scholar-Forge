@@ -6,6 +6,7 @@ import workspaceRouter from "./workspace";
 import paraphraseRouter from "./paraphrase";
 import similarityRouter from "./similarity";
 import citeRouter from "./cite";
+import exportRouter from "./export";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(workspaceRouter);
 router.use(paraphraseRouter);
 router.use(similarityRouter);
 router.use(citeRouter);
+router.use(exportRouter);
 
 export default router;

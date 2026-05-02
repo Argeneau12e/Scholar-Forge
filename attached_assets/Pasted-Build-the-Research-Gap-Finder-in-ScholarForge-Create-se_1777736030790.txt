@@ -1,0 +1,78 @@
+Build the Research Gap Finder in ScholarForge.
+
+Create /server/routes/gaps.js:
+
+POST /api/gaps accepts:
+{
+  items: CollectionItem[] (min 8 required),
+  topic: string,
+  discipline: string
+}
+
+Validate: if items.length < 8, return error 
+{ error: "Collect at least 8 snippets to find research gaps." }
+
+Build a consolidated summary of all items for the Claude prompt:
+- For each item: "[Author et al., Year] in [Journal]: [originalSnippet]"
+- Join all with double newlines
+- If total exceeds 6000 chars, use paraphrases instead of originals
+
+SYSTEM PROMPT (use exactly):
+"You are a senior academic research consultant analyzing a student's 
+literature collection. Your job is to identify genuine gaps, 
+contradictions, and opportunities for original contribution. You are 
+rigorous, honest, and practical. Return ONLY valid JSON."
+
+USER PROMPT:
+"Analyze these [N] papers on the topic of [topic] in [discipline]. 
+Identify research gaps and thesis opportunities.
+
+Papers:
+[consolidated summary]
+
+Return ONLY this JSON:
+{
+  gaps: [
+    {
+      title: string (8 words max),
+      description: string (2-3 sentences explaining the gap),
+      confidence: 'high' | 'medium' | 'speculative',
+      supportingPapers: string[] (author+year of papers that reveal 
+        this gap),
+      thesisAngle: string (one sentence — how a student could address 
+        this gap),
+      type: 'population' | 'timeframe' | 'methodology' | 
+        'contradiction' | 'mechanism'
+    }
+  ],
+  contradictions: [
+    {
+      paperA: string,
+      paperB: string,
+      issue: string (what they disagree on)
+    }
+  ],
+  strongestAngle: string (which gap is most feasible for a dissertation 
+    student and why, 2-3 sentences)
+}"
+
+Parse and validate JSON. Retry once with simpler prompt if parse fails.
+Return full result to client.
+
+Create /client/src/components/GapFinder.jsx:
+- Locked state when <8 snippets: progress bar showing "X/8 snippets 
+  needed", greyed out button
+- Unlocked state: "Analyze Research Gaps" button (prominent, mint green)
+- Loading state: "Reading your collection... Identifying patterns... 
+  Finding gaps..." (cycle every 2 seconds)
+- Results: each gap as a card with colored left border by type:
+  - Population gap: purple
+  - Timeframe gap: blue  
+  - Methodology gap: amber
+  - Contradiction: red
+  - Mechanism: teal
+- Each card shows: title, description, confidence badge, supporting 
+  papers, thesis angle suggestion in italic
+- Strongest angle shown in a featured card at top with gold border
+- "Save this angle as my thesis statement" button → saves to 
+  localStorage "sf_thesis"
