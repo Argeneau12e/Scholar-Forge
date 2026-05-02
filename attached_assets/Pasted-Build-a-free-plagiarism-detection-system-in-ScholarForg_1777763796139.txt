@@ -1,0 +1,76 @@
+Build a free plagiarism detection system in ScholarForge called 
+"Originality Check". This is NOT a Turnitin replacement — it is 
+honest about what it checks and what it doesn't. Be transparent 
+with the user.
+
+Create /server/routes/plagiarism.js:
+
+POST /api/plagiarism accepts:
+{
+  text: string (student's written paragraph or section),
+  collectionItems: CollectionItem[] (their saved sources)
+}
+
+THREE-LAYER CHECK:
+
+LAYER 1 — Source comparison (most important):
+Compare the submitted text semantically against every snippet 
+in the student's collection.
+Send to Claude: 
+"Compare this student text against each source. For each source, 
+return a similarity score 0-100 and identify any phrases of 4+ 
+words that appear in both. Be precise.
+
+Student text: [text]
+Sources: [each snippet with its citation]
+
+Return JSON: {
+  sourceMatches: [{
+    citation: string,
+    similarityScore: number,
+    matchedPhrases: string[],
+    verdict: 'well-paraphrased' | 'too-similar' | 'direct-quote-detected'
+  }],
+  overallRisk: 'low' | 'medium' | 'high'
+}"
+
+LAYER 2 — Open web check via search:
+Extract the 3 most distinctive phrases from the submitted text 
+(longest noun phrases, technical terms).
+For each phrase, call Semantic Scholar and check if it appears 
+verbatim in any paper abstract in your search results.
+Return matching papers as potential sources.
+
+LAYER 3 — Internal consistency check:
+If the student has submitted multiple paragraphs, check for 
+self-repetition — the same sentence appearing in multiple sections.
+
+BUILD THE UI in /client/src/components/PlagiarismChecker.jsx:
+
+Layout:
+- Large textarea: "Paste a paragraph or section to check"
+- "Check Originality" button
+- Disclaimer (permanent, non-removable):
+  "ScholarForge checks your text against your saved sources and 
+  open academic databases. It cannot access Turnitin's student 
+  paper database or your institution's submission history. 
+  Always use your institution's official plagiarism checker 
+  before final submission."
+
+Results display:
+- Overall risk badge: green (low) / amber (medium) / red (high)
+- Source match cards: each saved source that matches, showing:
+  - Matched phrases highlighted in both texts side by side
+  - Similarity percentage with color coding
+  - Verdict badge
+  - "Improve paraphrase" button → sends to paraphraser
+- Open web matches: papers found containing similar phrases
+- Internal repetition warnings
+- "What to do next" guidance based on risk level:
+  - Low: "Your paraphrasing looks good. Verify citations are correct."
+  - Medium: "Some phrases are close to sources. Consider revising 
+    highlighted sections."
+  - High: "Significant similarity detected. Rewrite the highlighted 
+    sections before submitting."
+
+Add to the main navigation as "Originality Check".

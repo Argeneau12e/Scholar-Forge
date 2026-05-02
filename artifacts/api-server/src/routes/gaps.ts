@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { wrapUserText, validateClaudeResponse } from "../lib/promptSafety";
 
 const router: IRouter = Router();
 
@@ -169,6 +170,7 @@ router.post("/gaps", async (req, res): Promise<void> => {
 
   const client = new Anthropic({ apiKey });
   const n = body.items.length;
+  const wrappedSummary = wrapUserText(summary);
 
   // First attempt
   let result: GapsResponse | null = null;
@@ -181,12 +183,18 @@ router.post("/gaps", async (req, res): Promise<void> => {
       messages: [
         {
           role: "user",
-          content: buildUserPrompt(n, topic, discipline, summary),
+          content: buildUserPrompt(n, topic, discipline, wrappedSummary),
         },
       ],
     });
 
     const raw = message.content[0]?.type === "text" ? message.content[0].text : "";
+    const gapsValidation = validateClaudeResponse(raw);
+    if (!gapsValidation.safe) {
+      req.log.warn({ ip: req.ip, route: "/api/gaps", reason: gapsValidation.reason }, "promptSafety: suspicious response blocked");
+      res.status(500).json({ error: "Response validation failed. Please try again." });
+      return;
+    }
     result = tryParseGaps(raw);
   } catch (err) {
     // Network/API failure — will attempt retry below

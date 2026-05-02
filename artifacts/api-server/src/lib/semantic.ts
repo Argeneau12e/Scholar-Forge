@@ -1,4 +1,6 @@
 import { logger } from "./logger";
+import { safeFetch } from "./safeFetch";
+import sanitizeHtml from "sanitize-html";
 
 export interface SemanticPaper {
   id: string;
@@ -37,7 +39,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function fetchWithRetry(url: string, retries = 1): Promise<Response | null> {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await fetch(url);
+      const res = await safeFetch(url);
       if (res.status === 429) {
         if (attempt < retries) {
           logger.warn({ attempt }, "semantic: rate limited, retrying after delay");
@@ -127,7 +129,7 @@ export async function searchSemantic(
       year: p.year ?? null,
       journal: p.venue || null,
       doi,
-      abstract: p.abstract ? p.abstract.slice(0, 300) : null,
+      abstract: p.abstract ? sanitizeHtml(p.abstract.slice(0, 300), { allowedTags: [], allowedAttributes: {} }) : null,
       citationCount: p.citationCount ?? null,
       openAccess: p.openAccessPdf ? true : null,
       url: paperUrl,

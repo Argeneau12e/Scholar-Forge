@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { wrapUserText, validateClaudeResponse } from "../lib/promptSafety";
 
 const router: IRouter = Router();
 
@@ -161,6 +162,7 @@ router.post("/coach", async (req, res): Promise<void> => {
   }
 
   const client = new Anthropic({ apiKey });
+  const safeText = wrapUserText(body.text.trim());
 
   try {
     if (mode === "jargon") {
@@ -169,9 +171,15 @@ router.post("/coach", async (req, res): Promise<void> => {
         model: "claude-sonnet-4-5",
         max_tokens: 1500,
         system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: buildJargonPrompt(body.text.trim(), discipline) }],
+        messages: [{ role: "user", content: buildJargonPrompt(safeText, discipline) }],
       });
       const raw = message.content[0]?.type === "text" ? message.content[0].text : "";
+      const jargonValidation = validateClaudeResponse(raw);
+      if (!jargonValidation.safe) {
+        req.log.warn({ ip: req.ip, route: "/api/coach/jargon", reason: jargonValidation.reason }, "promptSafety: suspicious response blocked");
+        res.status(500).json({ error: "Response validation failed. Please try again." });
+        return;
+      }
       const parsed = tryParseJson<{ clarityVersion: string }>(raw);
       res.json({ clarityVersion: parsed?.clarityVersion ?? raw, original: body.text.trim() });
       return;
@@ -182,9 +190,15 @@ router.post("/coach", async (req, res): Promise<void> => {
       model: "claude-sonnet-4-5",
       max_tokens: 2500,
       system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildFullPrompt(body.text.trim(), discipline) }],
+      messages: [{ role: "user", content: buildFullPrompt(safeText, discipline) }],
     });
     const raw = message.content[0]?.type === "text" ? message.content[0].text : "";
+    const coachValidation = validateClaudeResponse(raw);
+    if (!coachValidation.safe) {
+      req.log.warn({ ip: req.ip, route: "/api/coach", reason: coachValidation.reason }, "promptSafety: suspicious response blocked");
+      res.status(500).json({ error: "Response validation failed. Please try again." });
+      return;
+    }
     let result = tryParseJson<CoachResult>(raw);
 
     // Retry once with simplified prompt if parse fails

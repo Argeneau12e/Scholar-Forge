@@ -141,6 +141,7 @@ export function ExportModal({
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [citationsVerified, setCitationsVerified] = useState(true);
 
   // Update style when supervisor config changes
   useEffect(() => {
@@ -354,6 +355,28 @@ export function ExportModal({
               )}
             </div>
           </div>
+
+          {/* Citation verification checkbox */}
+          <div className="flex items-start gap-2.5 rounded-lg border border-border bg-muted/30 px-3.5 py-3">
+            <input
+              id="citation-verify"
+              type="checkbox"
+              checked={citationsVerified}
+              onChange={(e) => setCitationsVerified(e.target.checked)}
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-emerald-700 cursor-pointer"
+            />
+            <label htmlFor="citation-verify" className="text-xs text-foreground/80 leading-snug cursor-pointer select-none">
+              I have independently verified the accuracy of these citations before downloading.
+            </label>
+          </div>
+
+          {/* Verification warning */}
+          {!citationsVerified && (
+            <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5 text-xs text-orange-700">
+              <svg className="h-3.5 w-3.5 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
+              Please verify your citations are accurate before downloading. Metadata from academic databases can contain errors.
+            </div>
+          )}
 
           {/* Error */}
           {error && (

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { wrapUserText, validateClaudeResponse } from "../lib/promptSafety";
 
 const router: IRouter = Router();
 
@@ -117,7 +118,8 @@ router.post("/litreview", async (req, res): Promise<void> => {
     return;
   }
 
-  const summary = buildOrderedSummary(body.items);
+  const summary = wrapUserText(buildOrderedSummary(body.items));
+  const safeThesis = thesis ? wrapUserText(thesis) : "";
 
   try {
     const client = new Anthropic({ apiKey });
@@ -129,12 +131,18 @@ router.post("/litreview", async (req, res): Promise<void> => {
       messages: [
         {
           role: "user",
-          content: buildUserPrompt(structure, targetWordCount, discipline, thesis, summary),
+          content: buildUserPrompt(structure, targetWordCount, discipline, safeThesis, summary),
         },
       ],
     });
 
     const raw = message.content[0]?.type === "text" ? message.content[0].text.trim() : "";
+    const validation = validateClaudeResponse(raw);
+    if (!validation.safe) {
+      req.log.warn({ ip: req.ip, route: "/api/litreview", reason: validation.reason }, "promptSafety: suspicious response blocked");
+      res.status(500).json({ error: "Response validation failed. Please try again." });
+      return;
+    }
 
     // Extract inline citations from the generated text (exclude markers)
     const citationPattern = /\[([^\[\]]+\d{4}[^\[\]]*)\]/g;

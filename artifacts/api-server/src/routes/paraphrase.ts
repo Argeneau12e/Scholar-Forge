@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { wrapUserText, validateClaudeResponse } from "../lib/promptSafety";
 
 const router: IRouter = Router();
 
@@ -99,7 +100,7 @@ router.post("/paraphrase", async (req, res): Promise<void> => {
       messages: [
         {
           role: "user",
-          content: buildUserPrompt(body.text, body.intensity, discipline, citation),
+          content: buildUserPrompt(wrapUserText(body.text), body.intensity, discipline, citation),
         },
       ],
     });
@@ -111,6 +112,12 @@ router.post("/paraphrase", async (req, res): Promise<void> => {
     }
 
     const raw = content.text.trim();
+    const validation = validateClaudeResponse(raw);
+    if (!validation.safe) {
+      req.log.warn({ ip: req.ip, route: "/api/paraphrase", reason: validation.reason }, "promptSafety: suspicious response blocked");
+      res.status(500).json({ error: "Response validation failed. Please try again." });
+      return;
+    }
     const citationMatch = raw.match(/(\([^)]+\))\s*$/);
     const citationInline = citationMatch ? citationMatch[1] : "";
     const paraphrase = citationMatch

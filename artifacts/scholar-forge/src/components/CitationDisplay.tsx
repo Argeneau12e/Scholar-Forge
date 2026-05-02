@@ -266,6 +266,24 @@ export function CitationDisplay({ paper, open, onOpenChange }: CitationDisplayPr
                 )}
               </div>
 
+              {/* Verify source link */}
+              <div className="flex items-center gap-2 pt-0.5">
+                <a
+                  href={
+                    paper.doi
+                      ? `https://doi.org/${paper.doi}`
+                      : `https://scholar.google.com/scholar?q=${encodeURIComponent(paper.title)}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Always verify citations before submitting. Metadata from databases can contain errors."
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-emerald-700 underline underline-offset-2 transition-colors"
+                >
+                  Verify source ↗
+                </a>
+                <span className="text-[10px] text-muted-foreground/50">Always verify before submitting</span>
+              </div>
+
               {/* ── BibTeX toggle ── */}
               <div>
                 <button

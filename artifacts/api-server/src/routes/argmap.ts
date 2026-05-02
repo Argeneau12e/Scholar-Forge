@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { wrapUserText, validateClaudeResponse } from "../lib/promptSafety";
 
 const router: IRouter = Router();
 
@@ -134,7 +135,7 @@ router.post("/argmap", async (req, res): Promise<void> => {
     return;
   }
 
-  const thesis = typeof body.thesis === "string" ? body.thesis.trim() : "";
+  const thesis = typeof body.thesis === "string" ? wrapUserText(body.thesis.trim()) : "";
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -155,6 +156,12 @@ router.post("/argmap", async (req, res): Promise<void> => {
       messages: [{ role: "user", content: buildUserPrompt(body.items, thesis) }],
     });
     const raw = message.content[0]?.type === "text" ? message.content[0].text : "";
+    const argValidation = validateClaudeResponse(raw);
+    if (!argValidation.safe) {
+      req.log.warn({ ip: req.ip, route: "/api/argmap", reason: argValidation.reason }, "promptSafety: suspicious response blocked");
+      res.status(500).json({ error: "Response validation failed. Please try again." });
+      return;
+    }
     result = tryParseArgMap(raw);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "API error";

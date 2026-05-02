@@ -605,6 +605,11 @@ export function WritingCoach() {
         {tab === "structure" && <StructureCheck />}
         {tab === "jargon"    && <JargonClarity discipline={discipline} />}
       </div>
+
+      {/* Academic integrity note */}
+      <p className="text-center text-xs text-muted-foreground italic border-t pt-4">
+        ScholarForge helps you improve your writing — it does not write your dissertation for you. Always review and take full ownership of all submitted work.
+      </p>
     </div>
   );
 }

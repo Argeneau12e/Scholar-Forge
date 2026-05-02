@@ -1,8 +1,10 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { concurrentRequestLimit } from "./middlewares/requestLimit";
 
 const app: Express = express();
 
@@ -29,9 +31,30 @@ app.use(
   }),
 );
 app.use(cors());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:"],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'none'"],
+        frameSrc: ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+for (const p of ["/api/paraphrase", "/api/gaps", "/api/litreview", "/api/coach", "/api/argmap"]) {
+  app.use(p, concurrentRequestLimit);
+}
 app.use("/api", router);
 
 export default app;

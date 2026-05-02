@@ -1,5 +1,6 @@
 // @ts-ignore — citation-js publishes no TypeScript declarations
 import { Cite } from "@citation-js/core";
+import { safeFetch } from "./safeFetch";
 // @ts-ignore
 import "@citation-js/plugin-bibtex";
 // @ts-ignore
@@ -209,6 +210,31 @@ export function exportBibtex(metadataArray: CitationMetadata[]): string {
     .join("\n\n");
 }
 
+// ─── Output sanitization helpers ────────────────────────────────────────────
+
+/**
+ * Strips characters that could break .bib parsing or inject LaTeX commands.
+ * Removes backslashes, braces, and @ signs from field values.
+ */
+export function sanitizeBibtex(str: string | null | undefined): string {
+  if (!str) return "";
+  return str
+    .replace(/[\\{}@]/g, " ")
+    .replace(/[^\x20-\x7E\u00C0-\u024F]/g, "")
+    .trim();
+}
+
+/**
+ * Strips control characters from strings destined for docx XML field values.
+ * Does NOT HTML-encode — docx library handles that — but removes dangerous control chars.
+ */
+export function sanitizeDocx(str: string | null | undefined): string {
+  if (!str) return "";
+  return str
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+    .trim();
+}
+
 /** Fetch and normalize metadata from CrossRef, with a 24-hour in-memory cache. */
 export async function fetchMetadataFromDOI(doi: string): Promise<CitationMetadata> {
   const normalized = doi.replace(/^https?:\/\/doi\.org\//i, "").trim();
@@ -219,11 +245,10 @@ export async function fetchMetadataFromDOI(doi: string): Promise<CitationMetadat
   }
 
   const url = `https://api.crossref.org/works/${encodeURIComponent(normalized)}`;
-  const resp = await fetch(url, {
+  const resp = await safeFetch(url, {
     headers: {
       "User-Agent": "ScholarForge/1.0 (mailto:support@scholarforge.example.com)",
     },
-    signal: AbortSignal.timeout(10_000),
   });
 
   if (!resp.ok) {

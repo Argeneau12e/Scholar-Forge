@@ -1,5 +1,7 @@
 import { parseStringPromise } from "xml2js";
 import { logger } from "./logger";
+import { safeFetch } from "./safeFetch";
+import sanitizeHtml from "sanitize-html";
 
 export interface PaperSnippet {
   text: string;
@@ -23,6 +25,48 @@ export interface PubMedPaper {
 const ESEARCH_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi";
 const EFETCH_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi";
 const BATCH_SIZE = 5;
+
+// ─── NCBI rate limiter (token bucket) ───────────────────────────────────────
+
+class TokenBucket {
+  private tokens: number;
+  private readonly capacity: number;
+  private lastRefill: number;
+
+  constructor(rps: number) {
+    this.capacity = rps;
+    this.tokens = rps;
+    this.lastRefill = Date.now();
+  }
+
+  async consume(): Promise<void> {
+    const now = Date.now();
+    const elapsed = now - this.lastRefill;
+    const added = Math.floor(elapsed / (1000 / this.capacity));
+    if (added > 0) {
+      this.tokens = Math.min(this.capacity, this.tokens + added);
+      this.lastRefill = now;
+    }
+    if (this.tokens > 0) {
+      this.tokens--;
+      return;
+    }
+    const waitMs = Math.ceil(1000 / this.capacity);
+    await new Promise<void>((r) => setTimeout(r, waitMs));
+    this.tokens = 0;
+    this.lastRefill = Date.now();
+  }
+}
+
+const ncbiRps = process.env.NCBI_API_KEY ? 10 : 3;
+const ncbiLimiter = new TokenBucket(ncbiRps);
+
+if (!process.env.NCBI_API_KEY) {
+  logger.warn(
+    "NCBI_API_KEY not set — PubMed limited to 3 req/s. " +
+    "Register free at https://www.ncbi.nlm.nih.gov/account/ and set NCBI_API_KEY for 10 req/s."
+  );
+}
 
 function scorePhrase(phrase: string, text: string): number {
   if (!phrase || !text) return 0;
@@ -92,8 +136,10 @@ function extractSections(
 
 async function fetchArticle(pmcid: string): Promise<Record<string, unknown> | null> {
   try {
-    const url = `${EFETCH_BASE}?db=pmc&id=${pmcid}&rettype=xml&retmode=xml`;
-    const res = await fetch(url);
+    const apiKeyParam = process.env.NCBI_API_KEY ? `&api_key=${process.env.NCBI_API_KEY}` : "";
+    const url = `${EFETCH_BASE}?db=pmc&id=${pmcid}&rettype=xml&retmode=xml${apiKeyParam}`;
+    await ncbiLimiter.consume();
+    const res = await safeFetch(url);
     if (!res.ok) return null;
     const xml = await res.text();
     return (await parseStringPromise(xml, { explicitArray: true })) as Record<
@@ -168,7 +214,7 @@ function extractMeta(
     // Abstract
     const abstractEl = (articleMeta?.["abstract"] as Record<string, unknown>[])?.[0];
     const abstract = abstractEl
-      ? pickText(abstractEl).trim().slice(0, 300) || null
+      ? sanitizeHtml(pickText(abstractEl).trim().slice(0, 300), { allowedTags: [], allowedAttributes: {} }) || null
       : null;
 
     return { title, authors, year, journal, doi, abstract };
@@ -242,13 +288,15 @@ export async function searchPubMed(
   term += ' AND "open access"[filter]';
 
   const retstart = (page - 1) * 20;
+  const apiKeyParam = process.env.NCBI_API_KEY ? `&api_key=${process.env.NCBI_API_KEY}` : "";
   const url =
     `${ESEARCH_BASE}?db=pmc&term=${encodeURIComponent(term)}` +
-    `&retmax=20&retstart=${retstart}&retmode=json`;
+    `&retmax=20&retstart=${retstart}&retmode=json${apiKeyParam}`;
 
   let pmcids: string[] = [];
   try {
-    const res = await fetch(url);
+    await ncbiLimiter.consume();
+    const res = await safeFetch(url);
     if (!res.ok) {
       logger.warn({ status: res.status }, "pubmed: esearch failed");
       return [];
