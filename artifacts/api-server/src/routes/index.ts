@@ -8,6 +8,7 @@ import similarityRouter from "./similarity";
 import citeRouter from "./cite";
 import exportRouter from "./export";
 import gapsRouter from "./gaps";
+import litreviewRouter from "./litreview";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(similarityRouter);
 router.use(citeRouter);
 router.use(exportRouter);
 router.use(gapsRouter);
+router.use(litreviewRouter);
 
 export default router;

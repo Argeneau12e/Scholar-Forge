@@ -1,0 +1,85 @@
+Build the Argument Mapper in ScholarForge.
+
+Install: d3 (d3-force, d3-selection)
+
+Create /server/routes/argmap.js:
+
+POST /api/argmap accepts:
+{
+  items: CollectionItem[],
+  thesis: string (optional)
+}
+
+SYSTEM PROMPT:
+"You are a research analyst mapping the intellectual relationships between 
+academic papers. Return ONLY valid JSON, no preamble."
+
+USER PROMPT:
+"Analyze these papers and identify how they relate to each other and to 
+the student's thesis. 
+
+Papers:
+[For each item: [id]: [Author et al., Year] — [abstract or snippet]]
+
+[If thesis]: Student's thesis: [thesis]
+
+Return ONLY this JSON:
+{
+  nodes: [
+    {
+      id: string (match item id),
+      label: string (Author et al., Year),
+      cluster: string (thematic group name),
+      centrality: number (0-1, how central to the debate this paper is)
+    }
+  ],
+  edges: [
+    {
+      source: string (item id),
+      target: string (item id),
+      relationship: 'supports' | 'contradicts' | 'extends' | 
+        'replicates' | 'challenges',
+      strength: number (0-1),
+      note: string (one sentence explaining the relationship)
+    }
+  ],
+  thesisNode: {
+    label: 'Your thesis',
+    bestPosition: string (item id of paper the thesis most closely 
+      relates to),
+    positioning: string (2 sentences on where the thesis fits in 
+      the debate)
+  }
+}"
+
+Parse and validate. Return to client.
+
+Create /client/src/components/ArgumentMapper.jsx:
+
+Render an interactive D3 force-directed graph:
+- Each paper = a circular node, sized by centrality score
+- Node color by cluster (use a fixed palette of 6 distinct colors)
+- Thesis node = a star shape, gold color, always centered
+- Edge colors by relationship:
+  - supports: #4ade80 (green)
+  - contradicts: #f87171 (red)
+  - extends: #60a5fa (blue)
+  - replicates: #a78bfa (purple)
+  - challenges: #fb923c (orange)
+- Edge thickness proportional to strength
+
+Interactions:
+- Hover a node: show tooltip with paper title + abstract snippet
+- Click a node: highlight all its edges, show edge relationship notes 
+  in a side panel
+- Hover an edge: show the relationship note
+- Click thesis node: show the "positioning" text in side panel
+- Zoom and pan enabled
+
+Below the graph:
+- Color legend for edge types
+- List of all detected contradictions as text (each with paper A vs B 
+  and the disagreement)
+- "Download as PNG" button using canvas export
+
+Show "Not enough data" state if <5 items in collection.
