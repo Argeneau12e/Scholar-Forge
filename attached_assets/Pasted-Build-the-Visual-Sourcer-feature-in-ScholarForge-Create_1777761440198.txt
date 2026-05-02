@@ -1,0 +1,53 @@
+Build the Visual Sourcer feature in ScholarForge.
+
+Create /server/routes/visuals.js:
+
+POST /api/visuals accepts:
+{
+  topic: string,
+  discipline: string,
+  figureType: 'diagram' | 'graph' | 'table' | 'microscopy' | 'any'
+}
+
+PUBMED CENTRAL IMAGE SEARCH:
+Fetch: https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi
+Params: db=pmc, term=[topic] AND has_figure[filter], retmax=10, 
+  retmode=json
+For each result, fetch figure list via efetch in XML, extract:
+- Figure caption
+- Figure URL (PMC image URLs follow pattern: 
+  https://www.ncbi.nlm.nih.gov/pmc/articles/[pmcid]/figure/[figid]/)
+- Attribution: "Source: [Author et al., Year]. [Journal]. PMC[pmcid]. 
+  Open access."
+
+WIKIMEDIA COMMONS:
+Fetch: https://commons.wikimedia.org/w/api.php
+Params: action=query, generator=search, gsrsearch=[topic], 
+  gsrnamespace=6, prop=imageinfo, iiprop=url|extmetadata, 
+  gsrlimit=5, format=json
+Extract: image URL, title, license, attribution
+
+AI FIGURE SUGGESTION (if <3 results found):
+Ask Claude: "A student is writing about [topic] in [discipline] and 
+needs a figure. Describe in 2-3 sentences the ideal diagram or figure 
+that would best illustrate this topic for an academic paper. Then 
+suggest 3 free tools to create it."
+Return as { suggestion: string, tools: [{name, url, note}] }
+
+Return: { 
+  figures: [{ url, caption, attribution, source: 'pmc'|'wikimedia' }],
+  aiSuggestion: object|null
+}
+
+Create /client/src/components/VisualSourcer.jsx:
+- Topic input (pre-filled from current search topic)
+- Figure type selector
+- Results as a responsive image grid (3 cols desktop, 2 mobile)
+- Each image: thumbnail, caption (truncated to 2 lines), source badge
+- Click image: opens lightbox with full caption + full attribution string
+- "Copy attribution" button on each — copies the formatted figure 
+  caption ready to paste into paper
+- "Add to collection" button — saves figure reference to localStorage 
+  "sf_figures"
+- AI suggestion card at bottom if shown: mint green border, light 
+  background, tool links as pills

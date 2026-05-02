@@ -11,6 +11,7 @@ import gapsRouter from "./gaps";
 import litreviewRouter from "./litreview";
 import argmapRouter from "./argmap";
 import coachRouter from "./coach";
+import visualsRouter from "./visuals";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(gapsRouter);
 router.use(litreviewRouter);
 router.use(argmapRouter);
 router.use(coachRouter);
+router.use(visualsRouter);
 
 export default router;

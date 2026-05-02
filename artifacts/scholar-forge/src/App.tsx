@@ -7,6 +7,7 @@ import Home from "@/pages/home";
 import Supervisors from "@/pages/supervisors";
 import CollectionPage from "@/pages/collection";
 import CoachPage from "@/pages/coach";
+import VisualsPage from "@/pages/visuals";
 import { Layout } from "@/components/layout";
 
 const queryClient = new QueryClient();
@@ -19,6 +20,7 @@ function Router() {
         <Route path="/supervisors" component={Supervisors} />
         <Route path="/collection" component={CollectionPage} />
         <Route path="/coach" component={CoachPage} />
+        <Route path="/visuals" component={VisualsPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>
