@@ -148,6 +148,19 @@ export const ActivateSupervisorResponse = zod.object({
  */
 export const SearchPapersBody = zod.object({
   query: zod.string(),
+  topic: zod.string().nullish(),
+  phrase: zod.string().nullish(),
+  yearFrom: zod.number().nullish(),
+  yearTo: zod.number().nullish(),
+  source: zod
+    .union([
+      zod.literal("pubmed"),
+      zod.literal("semantic"),
+      zod.literal("both"),
+      zod.literal(null),
+    ])
+    .nullish(),
+  page: zod.number().nullish(),
   supervisorId: zod.number().nullish(),
   maxResults: zod.number().optional(),
 });
@@ -162,14 +175,31 @@ export const SearchPapersResponse = zod.object({
       year: zod.number().nullish(),
       venue: zod.string().nullish(),
       url: zod.string().nullish(),
+      doi: zod.string().nullish(),
       citationCount: zod.number().nullish(),
       relevanceScore: zod.number().nullish(),
       supervisorNote: zod.string().nullish(),
+      openAccess: zod.boolean().nullish(),
+      source: zod.string().nullish(),
+      snippets: zod
+        .array(
+          zod.object({
+            text: zod.string(),
+            section: zod.string(),
+            matchScore: zod.number(),
+          }),
+        )
+        .optional(),
     }),
   ),
   totalFound: zod.number(),
+  total: zod.number(),
   supervisorFiltered: zod.boolean(),
   query: zod.string(),
+  sources: zod.array(zod.string()),
+  semanticRateLimited: zod
+    .boolean()
+    .describe("True when Semantic Scholar returned a 429 rate-limit response"),
 });
 
 /**

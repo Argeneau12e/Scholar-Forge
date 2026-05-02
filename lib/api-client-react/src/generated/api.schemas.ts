@@ -55,11 +55,42 @@ export interface ActiveSupervisorResponse {
   supervisor: Supervisor | null;
 }
 
+/**
+ * @nullable
+ */
+export type SearchPapersBodySource =
+  | (typeof SearchPapersBodySource)[keyof typeof SearchPapersBodySource]
+  | null;
+
+export const SearchPapersBodySource = {
+  pubmed: "pubmed",
+  semantic: "semantic",
+  both: "both",
+} as const;
+
 export interface SearchPapersBody {
   query: string;
   /** @nullable */
+  topic?: string | null;
+  /** @nullable */
+  phrase?: string | null;
+  /** @nullable */
+  yearFrom?: number | null;
+  /** @nullable */
+  yearTo?: number | null;
+  /** @nullable */
+  source?: SearchPapersBodySource;
+  /** @nullable */
+  page?: number | null;
+  /** @nullable */
   supervisorId?: number | null;
   maxResults?: number;
+}
+
+export interface PaperSnippet {
+  text: string;
+  section: string;
+  matchScore: number;
 }
 
 export interface Paper {
@@ -75,18 +106,29 @@ export interface Paper {
   /** @nullable */
   url?: string | null;
   /** @nullable */
+  doi?: string | null;
+  /** @nullable */
   citationCount?: number | null;
   /** @nullable */
   relevanceScore?: number | null;
   /** @nullable */
   supervisorNote?: string | null;
+  /** @nullable */
+  openAccess?: boolean | null;
+  /** @nullable */
+  source?: string | null;
+  snippets?: PaperSnippet[];
 }
 
 export interface SearchPapersResponse {
   papers: Paper[];
   totalFound: number;
+  total: number;
   supervisorFiltered: boolean;
   query: string;
+  sources: string[];
+  /** True when Semantic Scholar returned a 429 rate-limit response */
+  semanticRateLimited: boolean;
 }
 
 export interface SearchRecord {

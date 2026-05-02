@@ -374,12 +374,39 @@ components:
       properties:
         query:
           type: string
+        topic:
+          type: ["string", "null"]
+        phrase:
+          type: ["string", "null"]
+        yearFrom:
+          type: ["integer", "null"]
+        yearTo:
+          type: ["integer", "null"]
+        source:
+          type: ["string", "null"]
+          enum: ["pubmed", "semantic", "both", null]
+        page:
+          type: ["integer", "null"]
         supervisorId:
           type: ["integer", "null"]
         maxResults:
           type: integer
       required:
         - query
+
+    PaperSnippet:
+      type: object
+      properties:
+        text:
+          type: string
+        section:
+          type: string
+        matchScore:
+          type: number
+      required:
+        - text
+        - section
+        - matchScore
 
     Paper:
       type: object
@@ -400,12 +427,22 @@ components:
           type: ["string", "null"]
         url:
           type: ["string", "null"]
+        doi:
+          type: ["string", "null"]
         citationCount:
           type: ["integer", "null"]
         relevanceScore:
           type: ["number", "null"]
         supervisorNote:
           type: ["string", "null"]
+        openAccess:
+          type: ["boolean", "null"]
+        source:
+          type: ["string", "null"]
+        snippets:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaperSnippet"
       required:
         - id
         - title
@@ -420,15 +457,27 @@ components:
             $ref: "#/components/schemas/Paper"
         totalFound:
           type: integer
+        total:
+          type: integer
         supervisorFiltered:
           type: boolean
         query:
           type: string
+        sources:
+          type: array
+          items:
+            type: string
+        semanticRateLimited:
+          type: boolean
+          description: True when Semantic Scholar returned a 429 rate-limit response
       required:
         - papers
         - totalFound
+        - total
         - supervisorFiltered
         - query
+        - sources
+        - semanticRateLimited
 
     SearchRecord:
       type: object
