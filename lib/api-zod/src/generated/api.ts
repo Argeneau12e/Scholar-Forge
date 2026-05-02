@@ -239,6 +239,27 @@ export const ParaphraseTextResponse = zod.object({
 });
 
 /**
+ * @summary Compute semantic similarity between original and paraphrase
+ */
+export const CheckSimilarityBody = zod.object({
+  original: zod.string(),
+  paraphrase: zod.string(),
+});
+
+export const checkSimilarityResponseScoreMin = 0;
+export const checkSimilarityResponseScoreMax = 100;
+
+export const CheckSimilarityResponse = zod.object({
+  score: zod
+    .number()
+    .min(checkSimilarityResponseScoreMin)
+    .max(checkSimilarityResponseScoreMax),
+  verdict: zod.enum(["high", "moderate", "low"]),
+  sharedPhrases: zod.array(zod.string()),
+  assessment: zod.string(),
+});
+
+/**
  * @summary Get all papers in the workspace
  */
 export const GetWorkspaceResponseItem = zod.object({

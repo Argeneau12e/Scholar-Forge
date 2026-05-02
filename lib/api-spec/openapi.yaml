@@ -209,6 +209,29 @@ paths:
         "503":
           description: AI not configured
 
+  /similarity:
+    post:
+      operationId: checkSimilarity
+      tags: [search]
+      summary: Compute semantic similarity between original and paraphrase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimilarityBody"
+      responses:
+        "200":
+          description: Similarity result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimilarityResult"
+        "400":
+          description: Invalid input
+        "503":
+          description: AI not configured
+
   /workspace:
     get:
       operationId: getWorkspace
@@ -686,3 +709,36 @@ components:
         - yearRange
         - topVenues
         - recentlyAdded
+
+    SimilarityBody:
+      type: object
+      properties:
+        original:
+          type: string
+        paraphrase:
+          type: string
+      required:
+        - original
+        - paraphrase
+
+    SimilarityResult:
+      type: object
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        verdict:
+          type: string
+          enum: [high, moderate, low]
+        sharedPhrases:
+          type: array
+          items:
+            type: string
+        assessment:
+          type: string
+      required:
+        - score
+        - verdict
+        - sharedPhrases
+        - assessment

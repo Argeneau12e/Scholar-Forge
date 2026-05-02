@@ -26,6 +26,8 @@ import type {
   SearchPapersBody,
   SearchPapersResponse,
   SearchRecord,
+  SimilarityBody,
+  SimilarityResult,
   Supervisor,
   UpdateSupervisorBody,
   WorkspaceAnalysis,
@@ -941,6 +943,92 @@ export const useParaphraseText = <
   TContext
 > => {
   return useMutation(getParaphraseTextMutationOptions(options));
+};
+
+/**
+ * @summary Compute semantic similarity between original and paraphrase
+ */
+export const getCheckSimilarityUrl = () => {
+  return `/api/similarity`;
+};
+
+export const checkSimilarity = async (
+  similarityBody: SimilarityBody,
+  options?: RequestInit,
+): Promise<SimilarityResult> => {
+  return customFetch<SimilarityResult>(getCheckSimilarityUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(similarityBody),
+  });
+};
+
+export const getCheckSimilarityMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkSimilarity>>,
+    TError,
+    { data: BodyType<SimilarityBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof checkSimilarity>>,
+  TError,
+  { data: BodyType<SimilarityBody> },
+  TContext
+> => {
+  const mutationKey = ["checkSimilarity"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof checkSimilarity>>,
+    { data: BodyType<SimilarityBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return checkSimilarity(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CheckSimilarityMutationResult = NonNullable<
+  Awaited<ReturnType<typeof checkSimilarity>>
+>;
+export type CheckSimilarityMutationBody = BodyType<SimilarityBody>;
+export type CheckSimilarityMutationError = ErrorType<void>;
+
+/**
+ * @summary Compute semantic similarity between original and paraphrase
+ */
+export const useCheckSimilarity = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof checkSimilarity>>,
+    TError,
+    { data: BodyType<SimilarityBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof checkSimilarity>>,
+  TError,
+  { data: BodyType<SimilarityBody> },
+  TContext
+> => {
+  return useMutation(getCheckSimilarityMutationOptions(options));
 };
 
 /**

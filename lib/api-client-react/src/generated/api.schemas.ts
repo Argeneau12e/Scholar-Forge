@@ -233,3 +233,28 @@ export interface WorkspaceStats {
   topVenues: WorkspaceStatsTopVenuesItem[];
   recentlyAdded: WorkspacePaper[];
 }
+
+export interface SimilarityBody {
+  original: string;
+  paraphrase: string;
+}
+
+export type SimilarityResultVerdict =
+  (typeof SimilarityResultVerdict)[keyof typeof SimilarityResultVerdict];
+
+export const SimilarityResultVerdict = {
+  high: "high",
+  moderate: "moderate",
+  low: "low",
+} as const;
+
+export interface SimilarityResult {
+  /**
+   * @minimum 0
+   * @maximum 100
+   */
+  score: number;
+  verdict: SimilarityResultVerdict;
+  sharedPhrases: string[];
+  assessment: string;
+}
