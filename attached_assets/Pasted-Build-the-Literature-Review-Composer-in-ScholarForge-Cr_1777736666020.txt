@@ -1,0 +1,71 @@
+Build the Literature Review Composer in ScholarForge.
+
+Create /server/routes/litreview.js:
+
+POST /api/litreview accepts:
+{
+  items: CollectionItem[] (ordered array — order matters),
+  thesis: string (optional — the student's thesis statement),
+  structure: 'thematic' | 'chronological' | 'methodological',
+  discipline: string,
+  targetWordCount: number (default: 800)
+}
+
+Build ordered summary of items including their tags:
+For each item in order:
+"[Tag group if first in tag]: [Author et al., Year] — [paraphrase]"
+
+SYSTEM PROMPT (use exactly):
+"You are an expert academic writing tutor helping a university student 
+draft a literature review. You write in formal academic English 
+appropriate for a dissertation. You NEVER fabricate citations or facts 
+not present in the provided snippets. You mark every place needing 
+student input clearly."
+
+USER PROMPT:
+"Write a [structure] literature review of approximately [targetWordCount] 
+words using ONLY the following sources. Discipline: [discipline].
+
+[If thesis provided]: The student's thesis is: [thesis]. Frame the 
+review to build toward this argument.
+
+Sources (in the order the student wants them used):
+[ordered summary]
+
+Requirements:
+- Open with a framing paragraph introducing the topic
+- Group sources according to their tags if provided
+- Write smooth transitions between sources
+- After each source reference, add [STUDENT: add your critical analysis 
+  here]
+- End with a synthesis paragraph identifying what the literature 
+  collectively shows
+- Use [Author et al., Year] inline citations throughout
+- Do NOT add sources not in the list above
+- Mark any structural suggestion with [SUGGESTION: ...]
+
+Output the literature review text only. No preamble."
+
+Return: { litreview: string, wordCount: number, citationsUsed: string[] }
+
+Create /client/src/components/LitReviewComposer.jsx:
+
+Step 1 — Pre-compose view:
+- Shows ordered list of collection items with drag handles
+- Structure selector: "Thematic" | "Chronological" | "By method"
+- Target word count slider: 500–2000 words
+- Thesis statement input (pre-filled from localStorage "sf_thesis")
+- "Draft Literature Review" button
+
+Step 2 — Result view:
+- Rich text editor (use a simple contenteditable div) pre-filled with 
+  the draft
+- [STUDENT: ...] markers highlighted in amber background
+- [SUGGESTION: ...] markers highlighted in blue background  
+- Word count display updating live as user edits
+- Toolbar: Bold | Italic | Undo | "Export to .docx"
+- "Regenerate with different structure" button (shows structure picker)
+- Citations used list at the bottom — formatted in supervisor style
+
+Export to .docx: calls /api/export with the edited text content, 
+returns downloadable Word document with proper formatting.
