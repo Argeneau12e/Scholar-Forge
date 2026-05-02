@@ -1,0 +1,88 @@
+Build the Writing Coach Mode in ScholarForge.
+
+Create /server/routes/coach.js:
+
+POST /api/coach accepts:
+{
+  text: string (student's draft paragraph),
+  mode: 'full' | 'clarity' | 'structure' | 'jargon',
+  discipline: string
+}
+
+SYSTEM PROMPT:
+"You are an experienced dissertation supervisor providing constructive 
+feedback on a student's academic writing. Be specific, actionable, and 
+encouraging. Return ONLY valid JSON."
+
+USER PROMPT for mode = 'full':
+"Analyze this student's paragraph from a [discipline] dissertation and 
+provide detailed feedback.
+
+Paragraph:
+[text]
+
+Return ONLY this JSON:
+{
+  scores: {
+    clarity: number (1-10),
+    structure: number (1-10),
+    academicRegister: number (1-10),
+    citationNeeds: number (1-10, where 10 = all claims cited)
+  },
+  passiveVoiceCount: number,
+  jargonDensity: 'low' | 'medium' | 'high',
+  issues: [
+    {
+      type: 'citation_missing' | 'jargon' | 'passive_voice' | 
+        'unclear_argument' | 'undefined_term' | 'structural',
+      quote: string (the exact problematic phrase, max 10 words),
+      explanation: string (what's wrong, 1 sentence),
+      fix: string (specific suggestion, 1 sentence)
+    }
+  ],
+  rewrite: string (improved version of the full paragraph),
+  clarityVersion: string (plain English version for comparison),
+  overallFeedback: string (2-3 encouraging but honest sentences)
+}"
+
+For mode = 'structure':
+POST /api/coach/outline accepts { text: string } (full section, not 
+just paragraph).
+Ask Claude to extract the implied topic sentence of each paragraph, 
+identify logical flow problems, flag terms used before being defined.
+Return: { paragraphs: [{ implied_topic: string, issues: string[] }], 
+  flowProblems: string[], definitionIssues: string[] }
+
+Create /client/src/components/WritingCoach.jsx:
+
+Tab layout with three modes:
+1. "Paragraph Review" — single paragraph analysis
+2. "Structure Check" — full section outline analysis  
+3. "Jargon Clarity" — paste text, get plain English version side by side
+
+Paragraph Review view:
+- Large textarea for input (placeholder: "Paste a paragraph from your 
+  draft...")
+- "Analyse" button
+- Score cards: 4 metric cards in a 2x2 grid (Clarity / Structure / 
+  Academic register / Citation needs) — each showing score out of 10 
+  with color coding (8-10 green, 5-7 amber, 1-4 red)
+- Issues list: each issue as a card with colored left border by type, 
+  showing the problematic quote in italic + explanation + fix suggestion
+- Two-column rewrite panel: original left, improved version right
+- "Apply rewrite" button copies improved version to clipboard
+- Passive voice count and jargon density shown as small badges
+
+Structure Check view:
+- Textarea for longer text
+- Output: numbered list of paragraphs, each showing implied topic 
+  sentence + any issues detected
+- Flow problems highlighted between paragraphs with a connecting arrow 
+  and issue description
+- Definition issues shown as warning cards
+
+Jargon Clarity view:
+- Textarea input
+- Side-by-side output: academic version (left) | plain English (right)
+- Toggle button to switch which version is shown full-width
+- Copy button for each version

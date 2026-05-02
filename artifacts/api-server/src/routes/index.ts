@@ -9,6 +9,7 @@ import citeRouter from "./cite";
 import exportRouter from "./export";
 import gapsRouter from "./gaps";
 import litreviewRouter from "./litreview";
+import argmapRouter from "./argmap";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(citeRouter);
 router.use(exportRouter);
 router.use(gapsRouter);
 router.use(litreviewRouter);
+router.use(argmapRouter);
 
 export default router;

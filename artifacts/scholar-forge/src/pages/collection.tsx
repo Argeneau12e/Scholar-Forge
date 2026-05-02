@@ -1,6 +1,7 @@
 import { CollectionWorkspace } from "@/components/CollectionWorkspace";
 import { GapFinder } from "@/components/GapFinder";
 import { LitReviewComposer } from "@/components/LitReviewComposer";
+import { ArgumentMapper } from "@/components/ArgumentMapper";
 
 export default function CollectionPage() {
   return (
@@ -14,6 +15,10 @@ export default function CollectionPage() {
 
         <div className="border-t border-dashed border-border pt-8">
           <LitReviewComposer />
+        </div>
+
+        <div className="border-t border-dashed border-border pt-8">
+          <ArgumentMapper />
         </div>
       </div>
     </div>
