@@ -3,13 +3,19 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: ScholarForge API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: supervisors
+    description: Supervisor constraint profiles
+  - name: search
+    description: Academic paper search
+  - name: workspace
+    description: Saved papers workspace
 paths:
   /healthz:
     get:
@@ -24,6 +30,237 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /supervisors:
+    get:
+      operationId: listSupervisors
+      tags: [supervisors]
+      summary: List all supervisor profiles
+      responses:
+        "200":
+          description: List of supervisors
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Supervisor"
+    post:
+      operationId: createSupervisor
+      tags: [supervisors]
+      summary: Create a supervisor profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSupervisorBody"
+      responses:
+        "201":
+          description: Created supervisor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supervisor"
+
+  /supervisors/active:
+    get:
+      operationId: getActiveSupervisor
+      tags: [supervisors]
+      summary: Get the currently active supervisor
+      responses:
+        "200":
+          description: Active supervisor or null
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActiveSupervisorResponse"
+
+  /supervisors/{id}:
+    get:
+      operationId: getSupervisor
+      tags: [supervisors]
+      summary: Get a supervisor by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Supervisor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supervisor"
+        "404":
+          description: Not found
+    patch:
+      operationId: updateSupervisor
+      tags: [supervisors]
+      summary: Update a supervisor profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSupervisorBody"
+      responses:
+        "200":
+          description: Updated supervisor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supervisor"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteSupervisor
+      tags: [supervisors]
+      summary: Delete a supervisor profile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /supervisors/{id}/activate:
+    post:
+      operationId: activateSupervisor
+      tags: [supervisors]
+      summary: Set a supervisor as the active one
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Activated supervisor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Supervisor"
+
+  /search:
+    post:
+      operationId: searchPapers
+      tags: [search]
+      summary: Search for academic papers with supervisor constraints
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchPapersBody"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchPapersResponse"
+
+  /search/history:
+    get:
+      operationId: getSearchHistory
+      tags: [search]
+      summary: Get recent search history
+      responses:
+        "200":
+          description: Recent searches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SearchRecord"
+
+  /workspace:
+    get:
+      operationId: getWorkspace
+      tags: [workspace]
+      summary: Get all papers in the workspace
+      responses:
+        "200":
+          description: Workspace papers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkspacePaper"
+    post:
+      operationId: addToWorkspace
+      tags: [workspace]
+      summary: Add a paper to the workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddToWorkspaceBody"
+      responses:
+        "201":
+          description: Added paper
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspacePaper"
+
+  /workspace/{id}:
+    delete:
+      operationId: removeFromWorkspace
+      tags: [workspace]
+      summary: Remove a paper from the workspace
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Removed
+
+  /workspace/analysis:
+    get:
+      operationId: getWorkspaceAnalysis
+      tags: [workspace]
+      summary: AI-generated analysis of workspace papers
+      responses:
+        "200":
+          description: Analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceAnalysis"
+
+  /workspace/stats:
+    get:
+      operationId: getWorkspaceStats
+      tags: [workspace]
+      summary: Summary statistics for workspace papers
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +271,305 @@ components:
       required:
         - status
 
+    Supervisor:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        constraints:
+          type: array
+          items:
+            type: string
+        focusAreas:
+          type: array
+          items:
+            type: string
+        excludeKeywords:
+          type: array
+          items:
+            type: string
+        minYear:
+          type: ["integer", "null"]
+        maxYear:
+          type: ["integer", "null"]
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - constraints
+        - focusAreas
+        - excludeKeywords
+        - isActive
+        - createdAt
+
+    CreateSupervisorBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        constraints:
+          type: array
+          items:
+            type: string
+        focusAreas:
+          type: array
+          items:
+            type: string
+        excludeKeywords:
+          type: array
+          items:
+            type: string
+        minYear:
+          type: ["integer", "null"]
+        maxYear:
+          type: ["integer", "null"]
+      required:
+        - name
+
+    UpdateSupervisorBody:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+        constraints:
+          type: array
+          items:
+            type: string
+        focusAreas:
+          type: array
+          items:
+            type: string
+        excludeKeywords:
+          type: array
+          items:
+            type: string
+        minYear:
+          type: ["integer", "null"]
+        maxYear:
+          type: ["integer", "null"]
+
+    ActiveSupervisorResponse:
+      type: object
+      properties:
+        supervisor:
+          oneOf:
+            - $ref: "#/components/schemas/Supervisor"
+            - type: "null"
+      required:
+        - supervisor
+
+    SearchPapersBody:
+      type: object
+      properties:
+        query:
+          type: string
+        supervisorId:
+          type: ["integer", "null"]
+        maxResults:
+          type: integer
+      required:
+        - query
+
+    Paper:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        abstract:
+          type: ["string", "null"]
+        year:
+          type: ["integer", "null"]
+        venue:
+          type: ["string", "null"]
+        url:
+          type: ["string", "null"]
+        citationCount:
+          type: ["integer", "null"]
+        relevanceScore:
+          type: ["number", "null"]
+        supervisorNote:
+          type: ["string", "null"]
+      required:
+        - id
+        - title
+        - authors
+
+    SearchPapersResponse:
+      type: object
+      properties:
+        papers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Paper"
+        totalFound:
+          type: integer
+        supervisorFiltered:
+          type: boolean
+        query:
+          type: string
+      required:
+        - papers
+        - totalFound
+        - supervisorFiltered
+        - query
+
+    SearchRecord:
+      type: object
+      properties:
+        id:
+          type: integer
+        query:
+          type: string
+        resultsCount:
+          type: integer
+        supervisorId:
+          type: ["integer", "null"]
+        searchedAt:
+          type: string
+      required:
+        - id
+        - query
+        - resultsCount
+        - searchedAt
+
+    WorkspacePaper:
+      type: object
+      properties:
+        id:
+          type: integer
+        paperId:
+          type: string
+        title:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        abstract:
+          type: ["string", "null"]
+        year:
+          type: ["integer", "null"]
+        venue:
+          type: ["string", "null"]
+        url:
+          type: ["string", "null"]
+        citationCount:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+        addedAt:
+          type: string
+      required:
+        - id
+        - paperId
+        - title
+        - authors
+        - addedAt
+
+    AddToWorkspaceBody:
+      type: object
+      properties:
+        paperId:
+          type: string
+        title:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        abstract:
+          type: ["string", "null"]
+        year:
+          type: ["integer", "null"]
+        venue:
+          type: ["string", "null"]
+        url:
+          type: ["string", "null"]
+        citationCount:
+          type: ["integer", "null"]
+        notes:
+          type: ["string", "null"]
+      required:
+        - paperId
+        - title
+        - authors
+
+    WorkspaceAnalysis:
+      type: object
+      properties:
+        summary:
+          type: string
+        themes:
+          type: array
+          items:
+            type: string
+        gaps:
+          type: array
+          items:
+            type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+        paperCount:
+          type: integer
+      required:
+        - summary
+        - themes
+        - gaps
+        - recommendations
+        - paperCount
+
+    WorkspaceStats:
+      type: object
+      properties:
+        totalPapers:
+          type: integer
+        yearRange:
+          type: object
+          properties:
+            min:
+              type: ["integer", "null"]
+            max:
+              type: ["integer", "null"]
+          required:
+            - min
+            - max
+        topVenues:
+          type: array
+          items:
+            type: object
+            properties:
+              venue:
+                type: string
+              count:
+                type: integer
+            required:
+              - venue
+              - count
+        recentlyAdded:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspacePaper"
+      required:
+        - totalPapers
+        - yearRange
+        - topVenues
+        - recentlyAdded
