@@ -260,6 +260,62 @@ export const CheckSimilarityResponse = zod.object({
 });
 
 /**
+ * @summary Format a citation in all styles, optionally fetching metadata from CrossRef
+ */
+export const FormatCitationBody = zod.object({
+  doi: zod.string().optional(),
+  metadata: zod
+    .object({
+      title: zod.string().optional(),
+      authors: zod.array(zod.string()).optional(),
+      year: zod.string().optional(),
+      journal: zod.string().optional(),
+      volume: zod.string().optional(),
+      issue: zod.string().optional(),
+      pages: zod.string().optional(),
+      doi: zod.string().optional(),
+      url: zod.string().optional(),
+    })
+    .optional(),
+});
+
+export const FormatCitationResponse = zod.object({
+  formatted: zod.object({
+    apa: zod.string(),
+    vancouver: zod.string(),
+    harvard: zod.string(),
+    mla: zod.string(),
+    chicago: zod.string(),
+  }),
+  bibtex: zod.string(),
+  metadata: zod.object({
+    title: zod.string().optional(),
+    authors: zod.array(zod.string()).optional(),
+    year: zod.string().optional(),
+    journal: zod.string().optional(),
+    volume: zod.string().optional(),
+    issue: zod.string().optional(),
+    pages: zod.string().optional(),
+    doi: zod.string().optional(),
+    url: zod.string().optional(),
+  }),
+});
+
+/**
+ * @summary Format multiple citations by DOI
+ */
+export const BatchCiteQueryParams = zod.object({
+  dois: zod.array(zod.coerce.string()).optional(),
+  style: zod.enum(["apa", "vancouver", "harvard", "mla", "chicago"]).optional(),
+});
+
+export const BatchCiteResponse = zod.object({
+  citations: zod.array(zod.string()),
+  bibtex: zod.string(),
+  errors: zod.array(zod.string()).optional(),
+});
+
+/**
  * @summary Get all papers in the workspace
  */
 export const GetWorkspaceResponseItem = zod.object({

@@ -19,6 +19,10 @@ import type {
 import type {
   ActiveSupervisorResponse,
   AddToWorkspaceBody,
+  BatchCiteParams,
+  BatchCiteResponse,
+  CiteBody,
+  CiteResponse,
   CreateSupervisorBody,
   HealthStatus,
   ParaphraseBody,
@@ -1030,6 +1034,195 @@ export const useCheckSimilarity = <
 > => {
   return useMutation(getCheckSimilarityMutationOptions(options));
 };
+
+/**
+ * @summary Format a citation in all styles, optionally fetching metadata from CrossRef
+ */
+export const getFormatCitationUrl = () => {
+  return `/api/cite`;
+};
+
+export const formatCitation = async (
+  citeBody: CiteBody,
+  options?: RequestInit,
+): Promise<CiteResponse> => {
+  return customFetch<CiteResponse>(getFormatCitationUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(citeBody),
+  });
+};
+
+export const getFormatCitationMutationOptions = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof formatCitation>>,
+    TError,
+    { data: BodyType<CiteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof formatCitation>>,
+  TError,
+  { data: BodyType<CiteBody> },
+  TContext
+> => {
+  const mutationKey = ["formatCitation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof formatCitation>>,
+    { data: BodyType<CiteBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return formatCitation(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type FormatCitationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof formatCitation>>
+>;
+export type FormatCitationMutationBody = BodyType<CiteBody>;
+export type FormatCitationMutationError = ErrorType<void>;
+
+/**
+ * @summary Format a citation in all styles, optionally fetching metadata from CrossRef
+ */
+export const useFormatCitation = <
+  TError = ErrorType<void>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof formatCitation>>,
+    TError,
+    { data: BodyType<CiteBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof formatCitation>>,
+  TError,
+  { data: BodyType<CiteBody> },
+  TContext
+> => {
+  return useMutation(getFormatCitationMutationOptions(options));
+};
+
+/**
+ * @summary Format multiple citations by DOI
+ */
+export const getBatchCiteUrl = (params?: BatchCiteParams) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["dois"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? "null" : v.toString());
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/cite/batch?${stringifiedParams}`
+    : `/api/cite/batch`;
+};
+
+export const batchCite = async (
+  params?: BatchCiteParams,
+  options?: RequestInit,
+): Promise<BatchCiteResponse> => {
+  return customFetch<BatchCiteResponse>(getBatchCiteUrl(params), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getBatchCiteQueryKey = (params?: BatchCiteParams) => {
+  return [`/api/cite/batch`, ...(params ? [params] : [])] as const;
+};
+
+export const getBatchCiteQueryOptions = <
+  TData = Awaited<ReturnType<typeof batchCite>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: BatchCiteParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof batchCite>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getBatchCiteQueryKey(params);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof batchCite>>> = ({
+    signal,
+  }) => batchCite(params, { signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof batchCite>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type BatchCiteQueryResult = NonNullable<
+  Awaited<ReturnType<typeof batchCite>>
+>;
+export type BatchCiteQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Format multiple citations by DOI
+ */
+
+export function useBatchCite<
+  TData = Awaited<ReturnType<typeof batchCite>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: BatchCiteParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof batchCite>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getBatchCiteQueryOptions(params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get all papers in the workspace

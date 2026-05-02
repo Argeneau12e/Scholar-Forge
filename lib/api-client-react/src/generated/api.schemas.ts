@@ -234,6 +234,43 @@ export interface WorkspaceStats {
   recentlyAdded: WorkspacePaper[];
 }
 
+export interface CitationMetadataInput {
+  title?: string;
+  authors?: string[];
+  year?: string;
+  journal?: string;
+  volume?: string;
+  issue?: string;
+  pages?: string;
+  doi?: string;
+  url?: string;
+}
+
+export interface AllFormats {
+  apa: string;
+  vancouver: string;
+  harvard: string;
+  mla: string;
+  chicago: string;
+}
+
+export interface CiteBody {
+  doi?: string;
+  metadata?: CitationMetadataInput;
+}
+
+export interface CiteResponse {
+  formatted: AllFormats;
+  bibtex: string;
+  metadata: CitationMetadataInput;
+}
+
+export interface BatchCiteResponse {
+  citations: string[];
+  bibtex: string;
+  errors?: string[];
+}
+
 export interface SimilarityBody {
   original: string;
   paraphrase: string;
@@ -258,3 +295,19 @@ export interface SimilarityResult {
   sharedPhrases: string[];
   assessment: string;
 }
+
+export type BatchCiteParams = {
+  dois?: string[];
+  style?: BatchCiteStyle;
+};
+
+export type BatchCiteStyle =
+  (typeof BatchCiteStyle)[keyof typeof BatchCiteStyle];
+
+export const BatchCiteStyle = {
+  apa: "apa",
+  vancouver: "vancouver",
+  harvard: "harvard",
+  mla: "mla",
+  chicago: "chicago",
+} as const;

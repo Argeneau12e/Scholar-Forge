@@ -146,6 +146,7 @@ export function SnippetCard({
 
   const [abstractExpanded, setAbstractExpanded] = useState(false);
   const [paraphraseOpen, setParaphraseOpen] = useState(false);
+  const [citeOpen, setCiteOpen] = useState(false);
 
   const saved = isInCollection(paper.id);
   const compliance = getCompliance(paper, supervisorConfig);
@@ -311,7 +312,7 @@ export function SnippetCard({
         )}
 
         {/* Action buttons */}
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex items-center gap-2 pt-1 flex-wrap">
           <Button
             size="sm"
             className="bg-emerald-700 hover:bg-emerald-800 text-white gap-1.5"
@@ -321,6 +322,17 @@ export function SnippetCard({
           >
             <Sparkles className="h-3.5 w-3.5" />
             Paraphrase this
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => setCiteOpen(true)}
+            data-testid={`btn-cite-${paper.id}`}
+          >
+            <Quote className="h-3.5 w-3.5" />
+            Cite
           </Button>
 
           <Button
@@ -342,7 +354,7 @@ export function SnippetCard({
             ) : (
               <>
                 <BookmarkPlus className="h-3.5 w-3.5" />
-                Save to collection
+                Save
               </>
             )}
           </Button>
@@ -355,6 +367,13 @@ export function SnippetCard({
         text={paraphraseText}
         open={paraphraseOpen}
         onOpenChange={setParaphraseOpen}
+      />
+
+      {/* Citation panel */}
+      <CitationDisplay
+        paper={paper}
+        open={citeOpen}
+        onOpenChange={setCiteOpen}
       />
     </>
   );

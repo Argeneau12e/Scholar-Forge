@@ -760,6 +760,79 @@ components:
         - topVenues
         - recentlyAdded
 
+    CitationMetadataInput:
+      type: object
+      properties:
+        title:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        year:
+          type: string
+        journal:
+          type: string
+        volume:
+          type: string
+        issue:
+          type: string
+        pages:
+          type: string
+        doi:
+          type: string
+        url:
+          type: string
+
+    AllFormats:
+      type: object
+      properties:
+        apa:
+          type: string
+        vancouver:
+          type: string
+        harvard:
+          type: string
+        mla:
+          type: string
+        chicago:
+          type: string
+      required: [apa, vancouver, harvard, mla, chicago]
+
+    CiteBody:
+      type: object
+      properties:
+        doi:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/CitationMetadataInput"
+
+    CiteResponse:
+      type: object
+      properties:
+        formatted:
+          $ref: "#/components/schemas/AllFormats"
+        bibtex:
+          type: string
+        metadata:
+          $ref: "#/components/schemas/CitationMetadataInput"
+      required: [formatted, bibtex, metadata]
+
+    BatchCiteResponse:
+      type: object
+      properties:
+        citations:
+          type: array
+          items:
+            type: string
+        bibtex:
+          type: string
+        errors:
+          type: array
+          items:
+            type: string
+      required: [citations, bibtex]
+
     SimilarityBody:
       type: object
       properties:
