@@ -10,6 +10,7 @@ import exportRouter from "./export";
 import gapsRouter from "./gaps";
 import litreviewRouter from "./litreview";
 import argmapRouter from "./argmap";
+import coachRouter from "./coach";
 
 const router: IRouter = Router();
 
@@ -24,5 +25,6 @@ router.use(exportRouter);
 router.use(gapsRouter);
 router.use(litreviewRouter);
 router.use(argmapRouter);
+router.use(coachRouter);
 
 export default router;

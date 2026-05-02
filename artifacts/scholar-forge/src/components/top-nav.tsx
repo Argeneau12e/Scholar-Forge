@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { BookOpen, UserCog, Library } from "lucide-react";
+import { BookOpen, UserCog, Library, PenLine } from "lucide-react";
 import { useGetActiveSupervisor } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { useCollection } from "@/hooks/useCollection";
@@ -62,6 +62,7 @@ export function TopNav() {
                 </span>
               )}
             </Link>
+            {navLink("/coach", "Writing Coach", <PenLine className="h-4 w-4" />)}
           </nav>
         </div>
 
