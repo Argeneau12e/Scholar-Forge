@@ -10,6 +10,7 @@ export interface SupervisorConfig {
   preferredJournals: string[];
   maxFigures: number;
   universityName: string;
+  focusAreas?: string[];
 }
 
 export const CITATION_STYLES = [

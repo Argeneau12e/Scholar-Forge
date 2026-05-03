@@ -13,6 +13,13 @@ import argmapRouter from "./argmap";
 import coachRouter from "./coach";
 import visualsRouter from "./visuals";
 import plagiarismRouter from "./plagiarism";
+import questionRouter from "./question";
+import papergraphRouter from "./papergraph";
+import citecontextRouter from "./citecontext";
+import outlineRouter from "./outline";
+import journalsRouter from "./journals";
+import digestRouter from "./digest";
+import methodologyRouter from "./methodology";
 
 const router: IRouter = Router();
 
@@ -30,5 +37,12 @@ router.use(argmapRouter);
 router.use(coachRouter);
 router.use(visualsRouter);
 router.use(plagiarismRouter);
+router.use(questionRouter);
+router.use(papergraphRouter);
+router.use(citecontextRouter);
+router.use(outlineRouter);
+router.use(journalsRouter);
+router.use(digestRouter);
+router.use(methodologyRouter);
 
 export default router;

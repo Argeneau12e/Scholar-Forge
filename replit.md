@@ -15,6 +15,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
+- **Frontend editor**: Tiptap v3 (Writing Studio)
+- **Graph viz**: D3 v7 (Connected Papers)
 
 ## Key Commands
 
@@ -26,88 +28,149 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
 
+## Navigation Structure
+
+The top nav uses grouped Radix UI dropdowns:
+
+| Dropdown | Items |
+|---|---|
+| **Write** | Writing Studio (`/studio`), Outline Editor (`/outline`) |
+| **Search** | Paper Search (`/`), Connected Papers (`/papergraph`), Question Answerer (`/question`) |
+| **Collection** | My Collection (`/collection`) |
+| **Analyse** | Originality Check (`/originality`) |
+| **Tools** | Journal Finder (`/journals`), Supervisors (`/supervisors`) |
+
+Single-page links remain in the nav bar: Supervisors, Originality, My Collection.
+
+## Feature Modules (A–H)
+
+### A — Research Question Answerer (`/question`)
+
+**Backend** `POST /api/question` — Fans out to OpenAlex + Semantic Scholar, classifies each paper's stance
+(`support` / `contradict` / `neutral`) using Claude. Returns structured verdict with counts and evidence list.
+
+**Frontend** `src/pages/question.tsx` — Query input, discipline selector, evidence cards colour-coded by stance,
+summary verdict badge (Supported / Contested / Insufficient Evidence / Contradicted).
+
+### B — Connected Papers Graph (`/papergraph`)
+
+**Backend** `POST /api/papergraph` — Looks up seed paper via OpenAlex, fetches cited works + citing works,
+returns `{ seed, nodes, edges }` D3-ready graph data. No Claude needed.
+
+**Frontend** `src/pages/papergraph.tsx` — Force-directed D3 graph, year-range slider filter, node size = citation count,
+node colour = decade, right panel shows selected paper details + "Save to Collection" button. Auto-fetches from `?doi=` or `?title=` URL params
+(deep-linked from SnippetCard "Connected Papers" button).
+
+### C — Citation Context (`/citecontext` dialog)
+
+**Backend** `POST /api/citecontext` — Given DOI + citing paper details, uses Claude to explain how/why
+the paper is cited in context. Returns `{ explanation, citationType, confidence }`.
+
+**Frontend** `src/components/SnippetCard.tsx` — "How cited?" button opens `CiteContextDialog` inline modal.
+Lazy-fetches on open; shows citation type badge + explanation paragraph.
+
+### D — Outline Editor (`/outline`)
+
+**Backend**
+- `POST /api/outline/analyze` — Claude reviews outline structure, returns `{ structureScore, issues[], missingEssentialSections, overallFeedback, suggestions[] }`
+- `POST /api/outline/resources` — Fans out to OpenAlex for each section heading; returns `{ sections: { [heading]: Paper[] } }`
+
+**Frontend** `src/pages/outline.tsx` — Three-panel layout: left = outline textarea, centre = AI feedback + missing
+sections, right = Methodology Advisor tab (fetches `POST /api/methodology`) + Resources tab.
+
+### E — Writing Studio (`/studio`)
+
+**Backend** — No dedicated route; uses existing paraphrase/coach routes.
+
+**Frontend** `src/pages/studio.tsx` — Tiptap v3 rich-text editor with:
+- Word count, sentence count, reading-time live stats
+- Document structure panel (heading outline)
+- Toolbar: Bold, Italic, Code, H1/H2, Bullet list
+- Citation inserter: picks from saved collection items, inserts formatted APA/Vancouver/Harvard inline citation
+- Export to `.txt` download
+
+### F — Journal Finder (`/journals`)
+
+**Backend** `POST /api/journals/recommend` — Claude recommends 5 open-access journals by discipline + abstract;
+DOAJ API enriches results with ISSN, publisher, APC, and submission URL.
+
+**Frontend** `src/pages/journals.tsx` — Abstract textarea, discipline picker, journal cards with fit-score badge,
+APC chip, review-time chip, open-access badge, "Submit here ↗" link.
+
+### G — Daily Digest
+
+**Backend** `POST /api/digest` — Accepts `{ topics[], discipline }`, fans out to OpenAlex for each topic,
+returns top papers from the past 30 days sorted by citation count. No Claude needed.
+
+**Frontend** `src/components/DigestBanner.tsx` — Shown on home page when supervisor has `focusAreas` set.
+Collapsible banner with today's date, topic chips, and paper cards with DOI links. Auto-fetches on mount.
+
+### H — Methodology Advisor (tab in Outline Editor)
+
+**Backend** `POST /api/methodology` — Claude recommends 3–5 research methodologies for the topic/question,
+with suitability rating, justification, key papers, and limitations.
+
+**Frontend** Embedded in `src/pages/outline.tsx` right-panel "Methodology" tab. Cards show methodology name,
+suitability badge, pros/cons chips, 3 key papers list.
+
 ## Security Implementation
 
 All 10 security items from the spec are implemented:
 
 ### Server-side
 - **Helmet CSP** (`app.ts`) — `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options` headers on all responses
-- **Per-IP concurrent request limit** (`middlewares/requestLimit.ts`) — max 3 in-flight requests per IP across all 5 AI routes, 5-minute slot timeout
-- **NCBI token bucket rate limiter** (`lib/pubmed.ts`) — 10 req/s with `NCBI_API_KEY`, 3 req/s without; startup warning if key missing; appended to all NCBI URLs
-- **External API domain whitelist** (`lib/safeFetch.ts`) — all outbound fetches to 9 approved academic API domains only; used in `pubmed.ts`, `citations.ts`, `semantic.ts`
-- **Prompt injection hardening** (`lib/promptSafety.ts`) — `wrapUserText()` wraps user content in `=== USER DOCUMENT START/END ===` delimiters; `validateClaudeResponse()` checks 6 suspicious patterns; applied to all 5 AI routes (paraphrase, gaps, litreview, coach, argmap) with IP+route logged on block
+- **Per-IP concurrent request limit** (`middlewares/requestLimit.ts`) — max 3 in-flight requests per IP across all AI routes, 5-minute slot timeout
+- **NCBI token bucket rate limiter** (`lib/pubmed.ts`) — 10 req/s with `NCBI_API_KEY`, 3 req/s without; startup warning if key missing
+- **External API domain whitelist** (`lib/safeFetch.ts`) — all outbound fetches to approved academic API domains only
+- **Prompt injection hardening** (`lib/promptSafety.ts`) — `wrapUserText()` delimiters; `validateClaudeResponse()` checks suspicious patterns
 - **Abstract HTML sanitization** (`lib/pubmed.ts`) — `sanitize-html` strips all tags from PubMed abstracts
 - **BibTeX injection protection** (`lib/citations.ts`) — `sanitizeBibtex()` strips `\`, `{`, `}`, `@` from field values
-- **Docx injection protection** (`lib/citations.ts`, `routes/export.ts`) — `sanitizeDocx()` strips control characters; applied to `docTitle` in litreview exports
+- **Docx injection protection** (`lib/citations.ts`, `routes/export.ts`) — `sanitizeDocx()` strips control characters
 - **Academic integrity watermark** (`routes/export.ts`) — first paragraph in all litreview `.docx` exports is a grey italic draft disclaimer
 
 ### Frontend
-- **Citation verify links** (`CitationDisplay.tsx`) — "Verify source ↗" links to DOI or Google Scholar fallback, with "Always verify before submitting" note
+- **Citation verify links** (`CitationDisplay.tsx`) — "Verify source ↗" links to DOI or Google Scholar fallback
 - **Writing Coach disclaimer** (`WritingCoach.tsx`) — italic integrity note in footer
-- **Lit review integrity banner** (`LitReviewComposer.tsx`) — non-dismissable amber `border-l-4` banner above the editor in the result step
-- **Export citations checkbox** (`ExportModal.tsx`) — "I have independently verified..." checkbox; inline orange warning when unchecked
+- **Lit review integrity banner** (`LitReviewComposer.tsx`) — non-dismissable amber banner above editor
+- **Export citations checkbox** (`ExportModal.tsx`) — "I have independently verified..." checkbox
 
 ## Multi-Source Search (8 Academic Databases)
 
-The search backend now fans out to 8 sources simultaneously via a unified orchestrator.
-
-### New source libraries (`artifacts/api-server/src/lib/`)
+The search backend fans out to 8 sources simultaneously:
 
 | File | Source | API | Key needed |
 |---|---|---|---|
-| `openalex.ts` | OpenAlex | `api.openalex.org` | No (polite pool, mailto param) |
-| `europepmc.ts` | Europe PMC | `www.ebi.ac.uk/europepmc/webservices/rest` | No |
-| `core.ts` | CORE | `api.core.ac.uk/v3` | Yes (`CORE_API_KEY` env var) |
-| `arxiv.ts` | arXiv | `export.arxiv.org/api` | No (XML/Atom parsed with xml2js) |
-| `unpaywall.ts` | Unpaywall | `api.unpaywall.org/v2` | No (email param) |
+| `openalex.ts` | OpenAlex | `api.openalex.org` | No |
+| `europepmc.ts` | Europe PMC | `www.ebi.ac.uk/europepmc` | No |
+| `core.ts` | CORE | `api.core.ac.uk/v3` | Yes (`CORE_API_KEY`) |
+| `arxiv.ts` | arXiv | `export.arxiv.org/api` | No |
+| `unpaywall.ts` | Unpaywall | `api.unpaywall.org/v2` | No |
 | `doaj.ts` | DOAJ | `doaj.org/api` | No |
 | `base.ts` | BASE | `api.base-search.net` | No |
-
-All existing `pubmed.ts` and `semantic.ts` sources retained.
-
-### Updated search route (`artifacts/api-server/src/routes/search.ts`)
-- Reads `sources: string[]` from the request body (alongside the legacy `source` field)
-- Fans out to all requested sources via `Promise.all` — each source `.catch(() => [])` so one failure never blocks others
-- Deduplicates by DOI first, then by normalized title (lowercase, alphanumeric only, first 60 chars)
-- Enriches all results with Unpaywall free PDF links (batch lookup, race-safe)
-- Sorts: snippet match score → citation count → recency
-- `UnifiedPaper` now includes `freePdfUrl: string | null` and `isPreprint: boolean`
-- safeFetch whitelist updated with `www.ebi.ac.uk` and `api.base-search.net`
-
-### Updated frontend
-
-**`SearchPanel.tsx`** — multi-select chip group
-- 8 source chips: OpenAlex + PubMed pre-selected by default
-- Hover tooltip on each chip explains what it covers
-- "Best for my discipline" button (visible when supervisor has focus areas set): auto-selects sources by keyword-matching the supervisor's focus areas (biomedical → PubMed + Europe PMC; CS/physics → arXiv + Semantic Scholar; humanities → CORE + BASE + DOAJ; otherwise OpenAlex + PubMed)
-- Must always have ≥1 source selected (last chip toggle is a no-op)
-- `PanelSearchParams.source` replaced by `sources: string[]`
-
-**`SnippetCard.tsx`** — extended paper card
-- `SourceBadge` component: color-coded badge per source (PMC=blue, S2=violet, OpenAlex=emerald, Europe PMC=cyan, CORE=amber, arXiv=red, DOAJ=pink, BASE=indigo)
-- Preprint badge (orange) shown when `paper.isPreprint === true`
-- "Free PDF ↗" link shown when `paper.freePdfUrl` is populated
+| `pubmed.ts` | PubMed | `eutils.ncbi.nlm.nih.gov` | Optional (`NCBI_API_KEY`) |
+| `semantic.ts` | Semantic Scholar | `api.semanticscholar.org` | No |
 
 ## Originality Check Feature (`/originality`)
 
-Three-layer plagiarism detection page added to the main navigation.
+Three-layer plagiarism detection:
+- **Layer 1 (Claude)**: Semantic comparison against saved sources → `similarityScore`, `matchedPhrases`, `verdict`, `overallRisk`
+- **Layer 2 (Semantic Scholar)**: Phrase-level web search for distinctive phrases
+- **Layer 3 (client-side)**: Internal repetition detection across paragraphs
 
-### Backend (`artifacts/api-server/src/routes/plagiarism.ts`)
-`POST /api/plagiarism` — accepts `{ text: string, collectionItems: CollectionItem[] }`
+## Known Pre-existing TypeScript Errors
 
-- **Layer 1 (Claude)**: Compares student text semantically against each saved source snippet. Returns per-source `similarityScore` (0–100), `matchedPhrases` (4+ word verbatim matches), `verdict` (`well-paraphrased` | `too-similar` | `direct-quote-detected`), and `overallRisk` (`low` | `medium` | `high`). Also extracts 3 distinctive phrases for Layer 2.
-- **Layer 2 (Semantic Scholar)**: Searches Semantic Scholar for each distinctive phrase; returns papers whose abstracts contain the phrase verbatim. Races against an 8-second timeout.
-- **Layer 3 (client-side)**: Splits text into paragraphs, extracts sentences ≥6 words, flags sentences appearing in multiple paragraphs as internal repetition.
-- Covered by `concurrentRequestLimit` middleware (max 3 in-flight per IP).
-- Degrades gracefully: Layer 3 always runs; Layers 1–2 skip if `ANTHROPIC_API_KEY` absent.
+These errors exist in the original codebase and are not introduced by recent work:
+- `Cannot find module '@workspace/api-client-react/src/generated/api.schemas'` — affects `CitationDisplay.tsx`, `CollectionWorkspace.tsx`, `ParaphrasePanel.tsx`, `SnippetCard.tsx`, `useCollection.ts`, `home.tsx`, `supervisors.tsx`
+- `ArgumentMapper.tsx` — implicit any in tooltip state setter
+- `home.tsx` — `queryKey` missing in `useGetWorkspaceAnalysis` call
+- `useCollection.ts` — duplicate `tags`/`order` keys in object spread
 
-### Frontend (`artifacts/scholar-forge/src/components/PlagiarismChecker.tsx`)
-- Large textarea (10,000 char limit) with word counter
-- Collection chip showing how many saved sources will be compared
-- Permanent non-removable disclaimer (what it checks / what it doesn't)
-- Overall risk badge (green/amber/red) + "What to do next" guidance text
-- Source match cards: expandable, show similarity bar, verdict badge, highlighted matched phrases in student text, "Improve paraphrase in Writing Coach" link for non-passing verdicts
-- Web match cards: paper title, authors, year, matched phrase badge, abstract preview, DOI/URL link
-- Internal repetition section: lists repeated sentences
-- Final reminder about institutional checker
-- Route: `/originality` · Nav: "Originality" with ShieldCheck icon
+## Environment Variables
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Yes (AI features) | Claude claude-sonnet-4-5 for all AI routes |
+| `DATABASE_URL` | Yes | PostgreSQL connection |
+| `SESSION_SECRET` | Yes | Express session signing |
+| `NCBI_API_KEY` | Optional | PubMed 10 req/s (3 req/s without) |
+| `CORE_API_KEY` | Optional | CORE academic search |

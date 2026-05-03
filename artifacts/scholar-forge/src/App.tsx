@@ -9,6 +9,11 @@ import CollectionPage from "@/pages/collection";
 import CoachPage from "@/pages/coach";
 import VisualsPage from "@/pages/visuals";
 import OriginalityPage from "@/pages/originality";
+import QuestionPage from "@/pages/question";
+import PaperGraphPage from "@/pages/papergraph";
+import WritingStudioPage from "@/pages/studio";
+import OutlinePage from "@/pages/outline";
+import JournalsPage from "@/pages/journals";
 import { Layout } from "@/components/layout";
 
 const queryClient = new QueryClient();
@@ -23,6 +28,11 @@ function Router() {
         <Route path="/coach" component={CoachPage} />
         <Route path="/visuals" component={VisualsPage} />
         <Route path="/originality" component={OriginalityPage} />
+        <Route path="/question" component={QuestionPage} />
+        <Route path="/papergraph" component={PaperGraphPage} />
+        <Route path="/studio" component={WritingStudioPage} />
+        <Route path="/outline" component={OutlinePage} />
+        <Route path="/journals" component={JournalsPage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

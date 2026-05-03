@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import {
   ExternalLink,
   ChevronDown,
@@ -8,6 +9,12 @@ import {
   Sparkles,
   AlertTriangle,
   Quote,
+  Share2,
+  MessageSquareQuote,
+  Loader2,
+  ThumbsUp,
+  ThumbsDown,
+  Minus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -164,6 +171,138 @@ function ComplianceDot({
   );
 }
 
+// ─── Citation Context Dialog ─────────────────────────────────────────────────
+interface CiteContextData {
+  total: number;
+  analyzed: number;
+  supporting: number;
+  contrasting: number;
+  mentioning: number;
+  contexts: Array<{
+    id: string;
+    title: string;
+    year: number | null;
+    url: string;
+    context: string;
+    contextType: "supporting" | "contrasting" | "mentioning";
+  }>;
+}
+
+function CiteContextDialog({
+  open,
+  onOpenChange,
+  doi,
+  title,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  doi: string;
+  title: string;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<CiteContextData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [fetched, setFetched] = useState(false);
+
+  const fetchContext = async () => {
+    if (fetched) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/citecontext", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ doi, title }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      setData(await res.json());
+      setFetched(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOpen = (o: boolean) => {
+    onOpenChange(o);
+    if (o) fetchContext();
+  };
+
+  const ctxColor: Record<string, string> = {
+    supporting: "text-emerald-700 bg-emerald-50 border-emerald-200",
+    contrasting: "text-red-700 bg-red-50 border-red-200",
+    mentioning: "text-muted-foreground bg-muted border-border",
+  };
+
+  const ctxIcon: Record<string, React.ReactNode> = {
+    supporting: <ThumbsUp className="h-3 w-3" />,
+    contrasting: <ThumbsDown className="h-3 w-3" />,
+    mentioning: <Minus className="h-3 w-3" />,
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpen}>
+      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="font-serif text-base leading-snug">
+            How is this paper cited?
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground line-clamp-1">{title}</p>
+        </DialogHeader>
+
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
+        {error && (
+          <p className="text-sm text-destructive text-center py-4">{error}</p>
+        )}
+
+        {data && !loading && (
+          <div className="flex-1 overflow-y-auto space-y-4">
+            {/* Summary counts */}
+            <div className="grid grid-cols-3 gap-3 text-center">
+              {[
+                { count: data.supporting, label: "Supporting", color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
+                { count: data.contrasting, label: "Contrasting", color: "text-red-700 bg-red-50 border-red-200" },
+                { count: data.mentioning, label: "Mentioning", color: "text-muted-foreground bg-muted border-border" },
+              ].map((item) => (
+                <div key={item.label} className={cn("rounded-xl border p-3", item.color)}>
+                  <p className="text-2xl font-bold font-serif">{item.count}</p>
+                  <p className="text-[11px]">{item.label}</p>
+                </div>
+              ))}
+            </div>
+
+            <p className="text-xs text-muted-foreground text-center">
+              Cited {data.total} times in OpenAlex · {data.analyzed} analysed
+            </p>
+
+            {/* Context list */}
+            <div className="space-y-2">
+              {data.contexts.map((ctx) => (
+                <div key={ctx.id} className={cn("rounded-lg border p-3 space-y-1", ctxColor[ctx.contextType])}>
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider">
+                    {ctxIcon[ctx.contextType]}
+                    {ctx.contextType}
+                  </div>
+                  <a href={ctx.url} target="_blank" rel="noreferrer" className="text-xs font-medium hover:underline line-clamp-1">
+                    {ctx.title}{ctx.year ? ` (${ctx.year})` : ""}
+                  </a>
+                  <p className="text-xs opacity-80 leading-relaxed">{ctx.context}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Main card ───────────────────────────────────────────────────────────────
 export function SnippetCard({
   paper,
@@ -171,21 +310,24 @@ export function SnippetCard({
   supervisorConfig,
 }: SnippetCardProps) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const { addFromPaper, addFromPaperForce, isInCollection } = useCollection();
 
   const [abstractExpanded, setAbstractExpanded] = useState(false);
   const [paraphraseOpen, setParaphraseOpen] = useState(false);
   const [citeOpen, setCiteOpen] = useState(false);
+  const [citeContextOpen, setCiteContextOpen] = useState(false);
   const [duplicatePaper, setDuplicatePaper] = useState<CollectionItem | null>(null);
 
   const saved = isInCollection(paper.id);
   const compliance = getCompliance(paper, supervisorConfig);
 
-  // Pick the best text to send to the paraphrase panel
   const paraphraseText =
     paper.snippets && paper.snippets.length > 0
       ? paper.snippets[0].text
       : paper.abstract ?? "";
+
+  const paperDoi = (paper as unknown as { doi?: string | null }).doi ?? null;
 
   const handleSave = () => {
     const result = addFromPaper(paper);
@@ -202,6 +344,15 @@ export function SnippetCard({
     const { total } = addFromPaperForce(paper);
     setDuplicatePaper(null);
     toast({ title: `Added another snippet (${total} total)` });
+  };
+
+  const handleConnectedPapers = () => {
+    const doi = paperDoi;
+    if (doi) {
+      navigate(`/papergraph?doi=${encodeURIComponent(doi)}`);
+    } else {
+      navigate(`/papergraph?title=${encodeURIComponent(paper.title)}`);
+    }
   };
 
   return (
@@ -336,7 +487,7 @@ export function SnippetCard({
         {/* Matched snippets with highlighted phrase */}
         {paper.snippets && paper.snippets.length > 0 && (
           <div className="space-y-2">
-            {paper.snippets.map((sn, i) => (
+            {(paper.snippets as Array<{ section?: string; matchScore: number; text: string }>).map((sn, i) => (
               <div
                 key={i}
                 className="rounded-lg bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 text-sm text-emerald-900 leading-relaxed"
@@ -385,6 +536,30 @@ export function SnippetCard({
           <Button
             size="sm"
             variant="outline"
+            className="gap-1.5"
+            onClick={handleConnectedPapers}
+            title="See papers in the same citation network"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            Connected Papers
+          </Button>
+
+          {paperDoi && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => setCiteContextOpen(true)}
+              title="How do other papers cite this one?"
+            >
+              <MessageSquareQuote className="h-3.5 w-3.5" />
+              How cited?
+            </Button>
+          )}
+
+          <Button
+            size="sm"
+            variant="outline"
             disabled={saved}
             onClick={handleSave}
             className={cn(
@@ -422,6 +597,16 @@ export function SnippetCard({
         open={citeOpen}
         onOpenChange={setCiteOpen}
       />
+
+      {/* Citation Context dialog */}
+      {paperDoi && (
+        <CiteContextDialog
+          open={citeContextOpen}
+          onOpenChange={setCiteContextOpen}
+          doi={paperDoi}
+          title={paper.title}
+        />
+      )}
 
       {/* Duplicate detection modal */}
       <Dialog

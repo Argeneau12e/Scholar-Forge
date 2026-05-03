@@ -40,6 +40,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import type { SearchPapersResponse } from "@workspace/api-client-react/src/generated/api.schemas";
+import { DigestBanner } from "@/components/DigestBanner";
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<"results" | "workspace">("results");
@@ -121,7 +122,7 @@ export default function Home() {
                   S2 rate-limited · PubMed only
                 </Badge>
               )}
-              {searchResults?.sources?.map((s) => (
+              {(searchResults?.sources as string[] | undefined)?.map((s: string) => (
                 <Badge
                   key={s}
                   variant="outline"
@@ -224,16 +225,25 @@ function ResultsView({
 
   // Empty state (no search yet)
   if (!results) {
+    const digestTopics = (supervisorConfig as unknown as { focusAreas?: string[] } | null)?.focusAreas ?? [];
     return (
-      <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4">
-        <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
-          <BookOpen className="h-8 w-8 text-emerald-700" />
+      <div className="max-w-3xl mx-auto w-full">
+        {digestTopics.length > 0 && (
+          <DigestBanner
+            topics={digestTopics}
+            discipline={(supervisorConfig as unknown as { discipline?: string } | null)?.discipline}
+          />
+        )}
+        <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4 py-16">
+          <div className="h-16 w-16 rounded-full bg-emerald-50 flex items-center justify-center mb-2">
+            <BookOpen className="h-8 w-8 text-emerald-700" />
+          </div>
+          <h2 className="font-serif text-2xl text-foreground">ScholarForge</h2>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            Enter a topic in the sidebar to search across 8 academic databases.
+            Supervisor constraints and year range filters are applied automatically.
+          </p>
         </div>
-        <h2 className="font-serif text-2xl text-foreground">ScholarForge</h2>
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Enter a topic in the sidebar to search PubMed and Semantic Scholar.
-          Supervisor constraints and year range filters are applied automatically.
-        </p>
       </div>
     );
   }
@@ -261,7 +271,8 @@ function ResultsView({
       </p>
 
       <div className="space-y-4">
-        {results.papers.map((paper) => (
+        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+        {(results.papers as any[]).map((paper: any) => (
           <SnippetCard
             key={paper.id}
             paper={paper}
