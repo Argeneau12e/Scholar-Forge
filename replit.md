@@ -1,4 +1,4 @@
-# Workspace
+# ScholarForge Workspace
 
 ## Overview
 
@@ -15,8 +15,9 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
-- **Frontend editor**: Tiptap v3 (Writing Studio)
+- **Frontend editor**: Tiptap v3 (Writing Studio — Highlight, Typography, Underline, TextAlign, Color, CharacterCount extensions)
 - **Graph viz**: D3 v7 (Connected Papers)
+- **PDF processing**: pdfjs-dist (PDF Library — worker from CDN)
 
 ## Key Commands
 
@@ -28,115 +29,106 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
 
-## Navigation Structure
+## Navigation Structure (Two-Tier)
 
-The top nav uses grouped Radix UI dropdowns:
+Tier 1: section toggles. Tier 2: animated sub-nav with all items per section.
 
-| Dropdown | Items |
+| Section | Items |
 |---|---|
-| **Write** | Writing Studio (`/studio`), Outline Editor (`/outline`) |
-| **Search** | Paper Search (`/`), Connected Papers (`/papergraph`), Question Answerer (`/question`) |
-| **Collection** | My Collection (`/collection`) |
-| **Analyse** | Originality Check (`/originality`) |
-| **Tools** | Journal Finder (`/journals`), Supervisors (`/supervisors`) |
+| **Write** | Studio (`/studio`), Outline (`/outline`), Schedule (`/schedule`), Peer Feedback (`/feedback`), Language Support (`/language`) |
+| **Search** | Papers (`/`), Question Answering (`/question`), Connected Papers (`/papergraph`) |
+| **Collection** | My Collection (`/collection`), Reading List (`/reading-list`), PDF Library (`/pdf-library`) |
+| **Analyse** | Gap Finder (`/gaps`), Argument Map (`/argmap`), Citation Context (`/citecontext-page`) |
+| **Tools** | Writing Coach (`/coach`), Originality (`/originality`), Journal Finder (`/journals`), Methodology (`/outline`), Poster Builder (`/poster`), Abstract Generator (`/abstract`) |
 
-Single-page links remain in the nav bar: Supervisors, Originality, My Collection.
+## All Routes (21 pages)
 
-## Feature Modules (A–H)
+`/`, `/supervisors`, `/collection`, `/coach`, `/visuals`, `/originality`, `/question`, `/papergraph`, `/studio`, `/outline`, `/journals`, `/schedule`, `/reading-list`, `/pdf-library`, `/gaps`, `/argmap`, `/citecontext-page`, `/poster`, `/abstract`, `/feedback`, `/language`
 
-### A — Research Question Answerer (`/question`)
+## Feature Modules — ALL COMPLETE
 
-**Backend** `POST /api/question` — Fans out to OpenAlex + Semantic Scholar, classifies each paper's stance
-(`support` / `contradict` / `neutral`) using Claude. Returns structured verdict with counts and evidence list.
+### Module 1 — Nav Restructure
+Two-tier nav with 5 sections. `sectionForPath()` maps all 21 routes to section IDs. Mobile bottom-sheet. Dark-mode toggle. Collection count badge.
 
-**Frontend** `src/pages/question.tsx` — Query input, discipline selector, evidence cards colour-coded by stance,
-summary verdict badge (Supported / Contested / Insufficient Evidence / Contradicted).
+### Module 2 — Reading Gap
+- **PDF Library** (`/pdf-library`): pdfjs-dist upload, text extraction, chat with PDF via `POST /api/pdf/chat` (SSE streaming)
+- **Reading List** (`/reading-list`): Kanban board (To Read / Reading / Done) + analytics dashboard
+- **Concept Explainer**: sliding panel on any paper card, `POST /api/concept`
+- **ReadingDashboard**: streaks, heatmap, completion stats
 
-### B — Connected Papers Graph (`/papergraph`)
+### Module 3 — Writing Studio Expansion
+Tiptap v3 with Highlight, Typography, Underline, TextAlign, Color, CharacterCount extensions. Full formatting toolbar. Floating AI action bar (rewrite, summarise, suggest, continue). 3-panel layout with version history (diff viewer). Word count live stats.
 
-**Backend** `POST /api/papergraph` — Looks up seed paper via OpenAlex, fetches cited works + citing works,
-returns `{ seed, nodes, edges }` D3-ready graph data. No Claude needed.
+### Module 4 — Outline + Schedule
+- **Outline Editor** (`/outline`): 3-panel layout; `POST /api/outline/analyze` (structure score, issues, missing sections); `POST /api/outline/resources` (OpenAlex per section); Methodology Advisor tab
+- **Schedule** (`/schedule`): Phase-based writing schedule generator; Claude motivational tips; progress tracker; `POST /api/schedule`
 
-**Frontend** `src/pages/papergraph.tsx` — Force-directed D3 graph, year-range slider filter, node size = citation count,
-node colour = decade, right panel shows selected paper details + "Save to Collection" button. Auto-fetches from `?doi=` or `?title=` URL params
-(deep-linked from SnippetCard "Connected Papers" button).
+### Module 5 — Collaboration
+**Peer Feedback** (`/feedback`):
+- Review sessions stored in localStorage (`sf2_feedback_sessions`)
+- Comment threads with quoted text, reviewer name, role (supervisor/peer/student), priority (critical/major/minor/suggestion), status (open/resolved/won't fix)
+- Reply threads on each comment
+- Progress bar (% resolved)
+- Export as plain text `.txt` report
+- Import from exported JSON
+- Share code (base64 session summary)
 
-### C — Citation Context (`/citecontext` dialog)
+### Module 6 — Language Support
+**Language** (`/language`) — three tools:
+- **ESL Writing Check** (`POST /api/language/check`): scores (overall/grammar/register/clarity), issues with suggested rewrites, positives, vocabulary gaps, L1 interference notes, suggested rewrite
+- **Translate** (`POST /api/language/translate`): 18 languages, academic register preserved, technical term glossary
+- **Simplify** (`POST /api/language/simplify`): plain English + optional translation, key terms defined
 
-**Backend** `POST /api/citecontext` — Given DOI + citing paper details, uses Claude to explain how/why
-the paper is cited in context. Returns `{ explanation, citationType, confidence }`.
+### Module 7 — Output Generators
+- **Poster Builder** (`/poster`): `POST /api/poster/content` generates structured academic poster (title, authors, intro, methods, findings, conclusions, limitations). In-browser editable via `contentEditable`. PNG export via `html2canvas`.
+- **Abstract Generator** (`/abstract`): `POST /api/abstract` generates structured or unstructured abstracts up to 600 words. Discipline-aware. Keyword integration. Word count enforced.
 
-**Frontend** `src/components/SnippetCard.tsx` — "How cited?" button opens `CiteContextDialog` inline modal.
-Lazy-fetches on open; shows citation type badge + explanation paragraph.
+### Module 8 — Security Audit (COMPLETE)
 
-### D — Outline Editor (`/outline`)
+#### Hardening applied
+| Layer | Measure |
+|---|---|
+| CORS | Restricted to `REPLIT_DOMAINS` in production; open in dev |
+| Helmet CSP | `defaultSrc 'self'`, no inline scripts, no frames, no objects |
+| Body size limit | `express.json({ limit: "1mb" })` — prevents large payload attacks |
+| Global Claude rate limiter | 60 req/hour per IP across all 20 AI routes (app.ts) |
+| Per-route rate limiters | Additional 40–50 req/hour limits on `language`, `pdfchat`, `concept` |
+| Concurrent request limit | Max 3 in-flight per IP for heavy AI routes |
+| Domain whitelist | `safeFetch.ts` — all outbound fetches to 11 approved academic APIs only |
+| Prompt injection | `wrapUserText()` delimiters; `validateClaudeResponse()` suspicious-pattern check |
+| XSS audit | `LitReviewComposer` uses `escHtml()` before innerHTML — confirmed safe; no `eval` or unescaped innerHTML in user paths |
+| Input validation middleware | `middlewares/inputValidation.ts` — `sanitizeString`, `clampInt`, `isSafeUrl`, `stripHtml` helpers |
+| Abstract sanitization | `sanitize-html` strips tags from PubMed/Semantic Scholar abstracts |
+| API key guard | All Claude routes check `ANTHROPIC_API_KEY` and return 503 if missing |
 
-**Backend**
-- `POST /api/outline/analyze` — Claude reviews outline structure, returns `{ structureScore, issues[], missingEssentialSections, overallFeedback, suggestions[] }`
-- `POST /api/outline/resources` — Fans out to OpenAlex for each section heading; returns `{ sections: { [heading]: Paper[] } }`
+## AI Routes Summary
 
-**Frontend** `src/pages/outline.tsx` — Three-panel layout: left = outline textarea, centre = AI feedback + missing
-sections, right = Methodology Advisor tab (fetches `POST /api/methodology`) + Resources tab.
+| Route | Method | Rate limit | Purpose |
+|---|---|---|---|
+| `/api/question` | POST | 60/hr global | Research question answering |
+| `/api/gaps` | POST | 60/hr global | Literature gap finder |
+| `/api/litreview` | POST | 60/hr global | Lit review generation |
+| `/api/coach` | POST | 60/hr global | Writing coach feedback |
+| `/api/argmap` | POST | 60/hr global | Argument mapper |
+| `/api/plagiarism` | POST | 60/hr global | Originality check |
+| `/api/similarity` | POST | 60/hr global | Semantic similarity |
+| `/api/citecontext` | POST | 60/hr global | Citation context |
+| `/api/paraphrase` | POST | 60/hr global | AI paraphrase |
+| `/api/outline/analyze` | POST | 60/hr global | Outline feedback |
+| `/api/outline/resources` | POST | 60/hr global | Section resources |
+| `/api/methodology` | POST | 60/hr global | Methodology advisor |
+| `/api/schedule` | POST | 60/hr global | Writing schedule + tips |
+| `/api/poster/content` | POST | 60/hr global | Poster content generation |
+| `/api/abstract` | POST | 60/hr global | Abstract generation |
+| `/api/pdf/chat` | POST | 50/hr + global | PDF chat (SSE streaming) |
+| `/api/concept` | POST | 50/hr + global | Concept explainer |
+| `/api/language/check` | POST | 40/hr + global | ESL writing check |
+| `/api/language/translate` | POST | 40/hr + global | Academic translation |
+| `/api/language/simplify` | POST | 40/hr + global | Plain language + translate |
+| `/api/journals/recommend` | POST | 60/hr global | Journal recommender |
+| `/api/workspace/analyze` | POST | 60/hr global | Workspace AI analysis |
 
-### E — Writing Studio (`/studio`)
-
-**Backend** — No dedicated route; uses existing paraphrase/coach routes.
-
-**Frontend** `src/pages/studio.tsx` — Tiptap v3 rich-text editor with:
-- Word count, sentence count, reading-time live stats
-- Document structure panel (heading outline)
-- Toolbar: Bold, Italic, Code, H1/H2, Bullet list
-- Citation inserter: picks from saved collection items, inserts formatted APA/Vancouver/Harvard inline citation
-- Export to `.txt` download
-
-### F — Journal Finder (`/journals`)
-
-**Backend** `POST /api/journals/recommend` — Claude recommends 5 open-access journals by discipline + abstract;
-DOAJ API enriches results with ISSN, publisher, APC, and submission URL.
-
-**Frontend** `src/pages/journals.tsx` — Abstract textarea, discipline picker, journal cards with fit-score badge,
-APC chip, review-time chip, open-access badge, "Submit here ↗" link.
-
-### G — Daily Digest
-
-**Backend** `POST /api/digest` — Accepts `{ topics[], discipline }`, fans out to OpenAlex for each topic,
-returns top papers from the past 30 days sorted by citation count. No Claude needed.
-
-**Frontend** `src/components/DigestBanner.tsx` — Shown on home page when supervisor has `focusAreas` set.
-Collapsible banner with today's date, topic chips, and paper cards with DOI links. Auto-fetches on mount.
-
-### H — Methodology Advisor (tab in Outline Editor)
-
-**Backend** `POST /api/methodology` — Claude recommends 3–5 research methodologies for the topic/question,
-with suitability rating, justification, key papers, and limitations.
-
-**Frontend** Embedded in `src/pages/outline.tsx` right-panel "Methodology" tab. Cards show methodology name,
-suitability badge, pros/cons chips, 3 key papers list.
-
-## Security Implementation
-
-All 10 security items from the spec are implemented:
-
-### Server-side
-- **Helmet CSP** (`app.ts`) — `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options` headers on all responses
-- **Per-IP concurrent request limit** (`middlewares/requestLimit.ts`) — max 3 in-flight requests per IP across all AI routes, 5-minute slot timeout
-- **NCBI token bucket rate limiter** (`lib/pubmed.ts`) — 10 req/s with `NCBI_API_KEY`, 3 req/s without; startup warning if key missing
-- **External API domain whitelist** (`lib/safeFetch.ts`) — all outbound fetches to approved academic API domains only
-- **Prompt injection hardening** (`lib/promptSafety.ts`) — `wrapUserText()` delimiters; `validateClaudeResponse()` checks suspicious patterns
-- **Abstract HTML sanitization** (`lib/pubmed.ts`) — `sanitize-html` strips all tags from PubMed abstracts
-- **BibTeX injection protection** (`lib/citations.ts`) — `sanitizeBibtex()` strips `\`, `{`, `}`, `@` from field values
-- **Docx injection protection** (`lib/citations.ts`, `routes/export.ts`) — `sanitizeDocx()` strips control characters
-- **Academic integrity watermark** (`routes/export.ts`) — first paragraph in all litreview `.docx` exports is a grey italic draft disclaimer
-
-### Frontend
-- **Citation verify links** (`CitationDisplay.tsx`) — "Verify source ↗" links to DOI or Google Scholar fallback
-- **Writing Coach disclaimer** (`WritingCoach.tsx`) — italic integrity note in footer
-- **Lit review integrity banner** (`LitReviewComposer.tsx`) — non-dismissable amber banner above editor
-- **Export citations checkbox** (`ExportModal.tsx`) — "I have independently verified..." checkbox
-
-## Multi-Source Search (8 Academic Databases)
-
-The search backend fans out to 8 sources simultaneously:
+## Multi-Source Search (9 Academic Databases)
 
 | File | Source | API | Key needed |
 |---|---|---|---|
@@ -150,12 +142,23 @@ The search backend fans out to 8 sources simultaneously:
 | `pubmed.ts` | PubMed | `eutils.ncbi.nlm.nih.gov` | Optional (`NCBI_API_KEY`) |
 | `semantic.ts` | Semantic Scholar | `api.semanticscholar.org` | No |
 
-## Originality Check Feature (`/originality`)
+## localStorage Keys
 
-Three-layer plagiarism detection:
-- **Layer 1 (Claude)**: Semantic comparison against saved sources → `similarityScore`, `matchedPhrases`, `verdict`, `overallRisk`
-- **Layer 2 (Semantic Scholar)**: Phrase-level web search for distinctive phrases
-- **Layer 3 (client-side)**: Internal repetition detection across paragraphs
+| Prefix | Used for |
+|---|---|
+| `sf_` | Existing keys (theme, collection, etc.) |
+| `sf2_` | New module keys (pdf_*, reading_*, concept_*, feedback_sessions) |
+
+## Environment Variables
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Yes (AI features) | Claude claude-haiku-4-5 for all AI routes |
+| `DATABASE_URL` | Yes | PostgreSQL connection |
+| `SESSION_SECRET` | Yes | Express session signing |
+| `NCBI_API_KEY` | Optional | PubMed 10 req/s (3 req/s without) |
+| `CORE_API_KEY` | Optional | CORE academic search |
+| `REPLIT_DOMAINS` | Auto-set | CORS restriction in production |
 
 ## Known Pre-existing TypeScript Errors
 
@@ -164,13 +167,3 @@ These errors exist in the original codebase and are not introduced by recent wor
 - `ArgumentMapper.tsx` — implicit any in tooltip state setter
 - `home.tsx` — `queryKey` missing in `useGetWorkspaceAnalysis` call
 - `useCollection.ts` — duplicate `tags`/`order` keys in object spread
-
-## Environment Variables
-
-| Variable | Required | Purpose |
-|---|---|---|
-| `ANTHROPIC_API_KEY` | Yes (AI features) | Claude claude-sonnet-4-5 for all AI routes |
-| `DATABASE_URL` | Yes | PostgreSQL connection |
-| `SESSION_SECRET` | Yes | Express session signing |
-| `NCBI_API_KEY` | Optional | PubMed 10 req/s (3 req/s without) |
-| `CORE_API_KEY` | Optional | CORE academic search |

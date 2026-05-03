@@ -1,0 +1,195 @@
+Implement the collaboration features in ScholarForge. These are:
+1. Supervisor sharing portal
+2. Study group collections
+3. Peer review mode
+
+===============================================================
+PART A: SUPERVISOR PORTAL
+===============================================================
+
+Create /server/routes/supervisor.js
+Create /client/src/pages/SupervisorPortal.jsx
+
+SHARING FLOW (student side):
+"Share with supervisor" button in Collection workspace and 
+Writing Studio generates a unique supervisor link:
+
+POST /api/supervisor/create-session accepts:
+{
+  collection: CollectionItem[],
+  documentContent: string (optional, the student's draft),
+  outlineData: object (optional),
+  studentNote: string (message to supervisor),
+  expiresIn: number (days, default 14)
+}
+
+Server:
+- Generate 32-char hex token using crypto.randomBytes(16)
+- Store session in Replit DB: key "supervisor:" + token
+- Value: { collection, documentContent, outlineData, studentNote,
+    comments: [], created: timestamp, expires: timestamp }
+- Return { url: "/supervisor/" + token }
+
+SUPERVISOR VIEW (no login required, just the token URL):
+A clean, read-only interface at /supervisor/[token]:
+- Header: "ScholarForge Supervisor Review — [student's note]"
+- Left panel: the student's collection with all snippets and 
+  paraphrases
+- Right panel: comment thread
+
+Supervisor can leave comments in two ways:
+1. Inline comment on any snippet card: click "Comment" button, 
+   type note, submit
+2. General comments in the right panel thread
+
+Comment types (dropdown when adding):
+- "Approved" (green check)
+- "Revise this" (amber)
+- "Remove this source" (red)
+- "General note" (blue)
+
+Comments stored in Replit DB under the session token.
+
+STUDENT NOTIFICATION:
+Student checks for new comments by visiting the "Shared sessions" 
+page (Tools > Supervisor Portal):
+- Shows all active shared sessions
+- "New comments" badge if supervisor has added comments since 
+  student last viewed
+- Comments displayed inline on the relevant snippet cards
+- "Mark as resolved" button per comment
+- "Reply" button opens a text field that adds to the comment thread
+
+No email required — student manually checks (keeps it simple 
+and privacy-respecting).
+
+Expiry: sessions auto-deleted from Replit DB after expiry date.
+Student can revoke a session early from the "Shared sessions" page.
+
+===============================================================
+PART B: STUDY GROUP COLLECTIONS
+===============================================================
+
+Create /server/routes/groups.js
+Create /client/src/pages/StudyGroup.jsx
+
+SIMPLE GROUP MODEL:
+Groups are identified by a shared passphrase (no accounts needed).
+A group is created when one student generates a group code.
+
+POST /api/groups/create accepts:
+{ topic: string, discipline: string, memberName: string }
+Returns: { groupCode: string (6 chars, uppercase) }
+
+POST /api/groups/join accepts:
+{ groupCode: string, memberName: string }
+Returns: { success: boolean, topic: string, memberCount: number }
+
+POST /api/groups/share-paper accepts:
+{ groupCode: string, memberName: string, paper: CollectionItem }
+Stores paper in Replit DB under "group:" + groupCode
+
+GET /api/groups/feed accepts: { groupCode: string }
+Returns: last 50 papers shared by any group member, sorted by newest
+
+STUDY GROUP UI:
+- Join/create group: code input + member name (no account needed)
+- Group feed: papers shared by all members
+- Each paper card shows: "Shared by [member name] · [time ago]"
+- "Add to my collection" button on each shared paper
+- "Relevant to my thesis?" button → Claude compares paper to 
+  the student's thesis statement and gives a yes/no + reason
+- Member list: shows active member names (no other data)
+- Chat (simple): a shared message thread in Replit DB
+  (text only, 500 char limit, last 100 messages stored)
+
+Privacy: group codes are not publicly discoverable. 
+No personal data stored — only member names (self-reported) 
+and shared papers.
+Group data expires from Replit DB after 90 days of inactivity.
+
+===============================================================
+PART C: PEER REVIEW MODE
+===============================================================
+
+Create /server/routes/peerreview.js
+Create /client/src/pages/PeerReview.jsx
+
+A voluntary, anonymous peer review exchange system.
+
+HOW IT WORKS:
+Student submits a paragraph for review using a review token system:
+- Submitting = spending 1 token
+- Reviewing someone else's work = earning 1 token
+- New users start with 1 token (can review immediately to get more)
+- Stored in localStorage sf2_review_tokens
+
+POST /api/peerreview/submit accepts:
+{ text: string (max 1000 words), discipline: string, 
+  feedbackType: 'argument' | 'clarity' | 'citations' | 'all',
+  anonymousId: string (generated client-side, stored in localStorage) }
+- Stores in Replit DB: "review_queue:" + uuid
+- Returns { submissionId: string }
+
+GET /api/peerreview/next accepts: { discipline: string }
+- Returns one submission from the review queue NOT submitted by 
+  this anonymousId and not yet reviewed
+- If no submissions available: returns { available: false }
+
+POST /api/peerreview/submit-feedback accepts:
+{ submissionId: string, feedback: ReviewFeedback, 
+  reviewerAnonId: string }
+
+ReviewFeedback structure (structured rubric — constrains 
+feedback to be useful, prevents abuse):
+{
+  argumentClarity: 1|2|3|4|5,
+  citationQuality: 1|2|3|4|5,
+  academicLanguage: 1|2|3|4|5,
+  bestThing: string (max 150 chars — what works well),
+  oneImprovement: string (max 150 chars — single specific suggestion),
+  overallImpression: 'needs-work' | 'developing' | 'solid' | 'strong'
+}
+
+- Marks submission as reviewed in Replit DB
+- Awards 1 token to the reviewer (client-side token increment — 
+  cannot be gamed to meaningful effect)
+- Stores feedback against the submissionId
+- If submission has 2 reviews, marks as complete and notifies
+
+GET /api/peerreview/my-feedback accepts: { submissionId: string }
+- Returns feedback for that submission (available once 2 reviews received)
+- After retrieval, submission deleted from Replit DB (privacy)
+
+UI:
+Two tabs: "Get Feedback" (submit your work) | "Give Feedback" (review)
+
+Get Feedback tab:
+- Token balance displayed ("You have 2 feedback credits")
+- Textarea for paragraph/section
+- Feedback type selector
+- Submission confirmation + estimated wait time ("Usually reviewed 
+  within 24 hours")
+- "Check for feedback" button (polls /api/peerreview/my-feedback)
+- When feedback arrives: displayed as two review cards side by side
+  with rubric scores and written comments
+- "Feed this back to Writing Coach" button sends feedback to 
+  /api/coach for further improvement suggestions
+
+Give Feedback tab:
+- "Get a paper to review" button (loads next from queue)
+- Shows anonymous submission with word count and discipline
+- Structured feedback form (the rubric above)
+- Character counter on text fields
+- "Submit feedback" button (awards token, loads next paper 
+  immediately if user wants to continue)
+
+After completing Module 4, test:
+1. Generate a supervisor link, open in incognito, add 3 comments
+2. Verify comments appear for the student in the portal
+3. Create a study group, join from a second browser, share a paper
+4. Verify the paper appears in the feed for both members
+5. Submit a paragraph for peer review, act as reviewer, submit 
+   feedback, verify feedback appears for submitter
+
+Report results before proceeding to Module 5.

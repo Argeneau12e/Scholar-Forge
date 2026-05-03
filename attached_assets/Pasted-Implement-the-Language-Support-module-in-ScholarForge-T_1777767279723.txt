@@ -1,0 +1,182 @@
+Implement the Language Support module in ScholarForge.
+This is ScholarForge's competitive moat in African, Asian, 
+and non-English-first academic markets.
+
+Lives at Tools > Language Support in the navigation.
+
+===============================================================
+PART A: ACADEMIC ENGLISH POLISH
+===============================================================
+
+Create /server/routes/languagepolish.js
+Create /client/src/components/AcademicEnglishPolish.jsx
+
+POST /api/language/polish accepts:
+{
+  text: string,
+  nativeLanguage: string (optional — helps Claude target advice),
+  discipline: string,
+  polishLevel: 'light' | 'standard' | 'deep'
+}
+
+SYSTEM PROMPT:
+"You are an expert academic English editor who has worked with 
+thousands of students from non-English-speaking backgrounds. 
+You understand the specific patterns of academic English errors 
+that come from different language backgrounds. You are 
+encouraging, specific, and never condescending.
+Return ONLY valid JSON."
+
+USER PROMPT:
+"Analyse this academic writing from a [discipline] student
+[if nativeLanguage: whose first language is [nativeLanguage]].
+Polish level: [polishLevel]
+
+Text: [text]
+
+Return JSON:
+{
+  polishedText: string (the improved version),
+  changes: [{
+    original: string (exact phrase changed),
+    replacement: string (what it was changed to),
+    reason: string (why — 1 sentence),
+    category: 'hedging' | 'register' | 'grammar' | 'word_choice' 
+      | 'sentence_structure' | 'academic_convention' | 'clarity'
+  }],
+  patterns: [{
+    pattern: string (a recurring writing habit to be aware of),
+    explanation: string (why it affects academic writing),
+    example: string (from their text),
+    betterApproach: string
+  }],
+  academicPhrasesIntroduced: string[] (new academic phrases used 
+    in the polished version the student should learn),
+  overallAssessment: string (2-3 encouraging sentences),
+  levelEstimate: 'developing' | 'intermediate' | 'proficient' 
+    | 'advanced'
+}"
+
+HEDGING LANGUAGE DETECTOR (run separately, not via Claude):
+Scan the text for overconfident statements missing hedging:
+Patterns to flag:
+- Sentences starting with "This proves..." → suggest "This suggests..."
+- "It is obvious that..." → suggest "Evidence indicates that..."
+- "All studies show..." → suggest "Most studies reviewed suggest..."
+- "X causes Y" without qualification → suggest "X may contribute to Y"
+- "It is a fact that..." → suggest removing this phrase entirely
+
+Return flags as { phrase: string, suggestion: string, rule: string }
+
+COMMON MISTAKES BY LANGUAGE BACKGROUND:
+If nativeLanguage is provided, add targeted notes:
+- French speakers: article overuse, false cognates
+- Arabic speakers: definite article patterns, verb-subject agreement
+- Chinese/Japanese speakers: article omission, subject omission
+- Yoruba/Igbo/Hausa speakers: specific pattern notes
+- Portuguese speakers: ser/estar confusion equivalents in English
+These are added as targeted pattern cards.
+
+UI LAYOUT:
+Split panel:
+- Left: original text (read-only, with flagged phrases highlighted)
+- Right: polished text (editable, with changes highlighted in green)
+
+Below the split panel:
+- Change cards: each change shown with original → replacement + reason
+  Filterable by category
+- Patterns section: recurring habits the student should learn from
+  Expandable cards with explanation + their example + better approach
+- Academic phrases panel: new phrases used in the polish, 
+  each with a "Save to my phrase bank" button
+
+PHRASE BANK (localStorage sf2_phrase_bank):
+A personal collection of academic phrases the student wants to remember.
+Categories: Hedging | Comparison | Contrast | Addition | Causation 
+  | Emphasis | Reference | Conclusion
+Accessible from Tools > Phrase Bank as a searchable, categorised list.
+"Use in editor" button inserts phrase at cursor in Writing Studio.
+
+===============================================================
+PART B: MULTILINGUAL ABSTRACT TRANSLATOR
+===============================================================
+
+Create /server/routes/translate.js
+Create /client/src/components/AbstractTranslator.jsx
+
+POST /api/translate/abstract accepts:
+{
+  abstract: string (the English academic abstract),
+  targetLanguage: string,
+  discipline: string
+}
+
+Supported languages (list explicitly in UI and docs):
+French, Spanish, Portuguese, Arabic, Swahili, Hausa, Yoruba, 
+Igbo, Amharic, Zulu, Afrikaans, Hindi, Urdu, Bahasa Indonesia, 
+Mandarin Chinese, Japanese, Korean, Russian, German, Italian
+
+SYSTEM PROMPT:
+"You are an expert academic translator specialising in research 
+abstracts. You must:
+1. Preserve all scientific content and findings exactly
+2. Use the correct academic register in [targetLanguage]
+3. Use discipline-appropriate terminology for [discipline]
+4. Maintain the standard abstract structure: background, objective, 
+   methods, results, conclusion
+5. Never add or remove information from the original
+Return ONLY the translated abstract text, no preamble."
+
+UI:
+- English abstract input (textarea or pull from Writing Studio)
+- Language selector dropdown with flag emojis for major languages
+- Discipline confirmation (from supervisor config)
+- "Translate" button
+- Output: translated text in a read-only box with the target 
+  language name as the label
+- "Copy" button
+- "Download bilingual abstract" button: generates a simple formatted 
+  document with English on the left, translation on the right — 
+  ready for dissertation appendix submission
+- Quality note (always shown, non-dismissable):
+  "Machine translation of academic text should be reviewed by a 
+  native speaker before submission if your institution requires it."
+
+===============================================================
+PART C: GLOBAL CITATION STYLES
+===============================================================
+
+ScholarForge already has APA, Vancouver, Harvard, MLA, Chicago.
+Add institution-specific and regional styles:
+
+Install additional CSL files from the official CSL repository:
+- IEEE (engineering)
+- Nature (nature journals)
+- ABNT (Brazilian standard — huge market)
+- DIN 1505 (German standard)
+- GB/T 7714 (Chinese national standard)
+- OSCOLA (Oxford legal citation — UK law)
+- AMA (American Medical Association)
+- NLM (National Library of Medicine)
+
+Download CSL files from:
+https://github.com/citation-style-language/styles
+Store in /server/csl/ directory.
+
+Update /server/lib/citations.js to load from local CSL files.
+Update supervisor setup dropdown to include all new styles.
+Add a search/filter to the style dropdown (with 14+ options, 
+scrolling is needed).
+
+After completing Module 5, test:
+1. Paste a paragraph and run Academic English Polish — verify 
+   changes are tracked and explained
+2. Test with nativeLanguage set to "Yoruba" and verify targeted 
+   patterns appear
+3. Translate an abstract to French and Swahili — verify academic 
+   register is maintained
+4. Format a citation in IEEE and ABNT — verify correctness
+5. Add 5 phrases to the phrase bank and verify they appear 
+   categorised correctly
+
+Report results before proceeding to Module 6.

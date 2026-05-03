@@ -1,0 +1,234 @@
+Implement the output generation features in ScholarForge.
+Lives under Tools in the navigation.
+
+===============================================================
+PART A: RESEARCH PROPOSAL GENERATOR
+===============================================================
+
+Create /server/routes/proposal.js
+Create /client/src/pages/ProposalGenerator.jsx
+
+POST /api/proposal accepts:
+{
+  topic: string,
+  researchQuestion: string,
+  discipline: string,
+  institution: string,
+  supervisorName: string,
+  wordLimit: number (default 2000),
+  proposalType: 'undergraduate' | 'masters' | 'phd',
+  existingOutline: string (optional),
+  collectionSummary: string (auto-built from saved collection)
+}
+
+SYSTEM PROMPT:
+"You are an experienced academic supervisor helping a student 
+write a research proposal. You write proposals that are clear, 
+convincing, and methodologically sound. You never fabricate 
+references or statistics."
+
+USER PROMPT:
+"Write a [proposalType] research proposal for a [discipline] 
+student at [institution] under supervisor [supervisorName].
+
+Topic: [topic]
+Research question: [researchQuestion]
+Word limit: [wordLimit] words
+[If collection: The student has reviewed these sources: 
+  [collectionSummary]]
+
+Structure the proposal with these sections, distributed across 
+[wordLimit] words:
+1. Title (not counted in word limit)
+2. Background and rationale (25% of words)
+3. Research question and objectives (10%)
+4. Literature review overview (20%)
+5. Proposed methodology (25%)
+6. Expected contribution and significance (10%)
+7. Timeline (as a table)
+8. References (the student's actual saved sources)
+
+Requirements:
+- All claims must be supportable from the provided sources
+- Mark any section where the student must add institution-specific 
+  information as [STUDENT: add X here]
+- Timeline must be realistic for a [proposalType] dissertation
+- Methodology must match [discipline] conventions
+- Do not invent statistics or citations"
+
+Output is rendered in an editable rich text area (same as lit review).
+Export as .docx with proper heading styles and formatting.
+
+===============================================================
+PART B: ABSTRACT GENERATOR
+===============================================================
+
+Create /server/routes/abstract.js
+Create /client/src/components/AbstractGenerator.jsx
+
+POST /api/abstract accepts:
+{
+  documentContent: string (student's draft or summary),
+  wordLimit: number (150 | 200 | 250 | 300 | 500),
+  abstractType: 'structured' | 'unstructured',
+  discipline: string,
+  keywords: string[] (optional — student-provided)
+}
+
+Structured abstract (medical/scientific) sections:
+Background | Objective | Methods | Results | Conclusions
+
+Unstructured abstract (humanities/social sciences):
+Single continuous paragraph covering the same elements.
+
+SYSTEM PROMPT:
+"You are an expert at writing academic abstracts. An abstract 
+must be completely self-contained, accurate, and exactly within 
+the word limit. Never add information not present in the source."
+
+Return:
+{
+  abstract: string,
+  wordCount: number,
+  keywords: string[] (5-8 suggested MeSH or discipline-specific 
+    keywords),
+  sections: { background, objective, methods, results, 
+    conclusions } (for structured type only)
+}
+
+UI:
+- Source selector: "Use my Writing Studio document" | 
+  "Paste a summary" | "Use my collection"
+- Word limit selector with common presets
+- Type selector with explanation of when each is used
+- Keywords input (optional, or let Claude suggest)
+- Generated abstract in editable box
+- Word count live counter with color coding 
+  (red if over limit, green if within 10% below)
+- "Regenerate" button
+- "Copy" and "Export" buttons
+
+===============================================================
+PART C: POSTER BUILDER
+===============================================================
+
+Create /client/src/pages/PosterBuilder.jsx
+Create /server/routes/poster.js
+
+POST /api/poster/content accepts:
+{ collection: CollectionItem[], outline: object, 
+  topic: string, discipline: string }
+
+Claude generates structured poster content:
+{
+  title: string,
+  authors: string,
+  institution: string,
+  introduction: string (100 words),
+  objectives: string[] (3-4 bullet points),
+  methods: string (80 words),
+  keyFindings: string[] (4-5 bullet points),
+  conclusions: string (80 words),
+  references: string[] (4-5 key references formatted),
+  suggestedFigure: string (description of an ideal visual)
+}
+
+POSTER RENDERER:
+A visual HTML poster editor (A0 aspect ratio: 841mm × 1189mm, 
+rendered at 600px × 848px for screen).
+
+Standard academic poster layout:
+┌─────────────────────────────────┐
+│           TITLE                  │
+│      Authors · Institution       │
+├──────────┬──────────┬────────────┤
+│ Intro    │ Methods  │ Findings   │
+│          │          │            │
+├──────────┴──────────┴────────────┤
+│ Conclusions │ References │ QR    │
+└─────────────────────────────────┘
+
+Each section:
+- Editable inline (click to edit text)
+- Resizable (drag bottom edge)
+- ScholarForge colors by default, with color theme selector:
+  - Academic (mint + white — default)
+  - Navy (dark blue + gold)
+  - Earth (warm brown + cream)
+  - Monochrome (black + white)
+
+Figure placeholder section:
+- Shows the AI-suggested figure description
+- "Upload figure" button (accepts PNG/JPG, displayed in section)
+- "Find open-access figure" button (calls Visual Sourcer)
+
+Export:
+- "Download as PDF" → html2canvas at 2x resolution → jsPDF
+- "Download as PNG" → html2canvas at 2x resolution
+- Note: "For print production, we recommend opening the PDF in 
+  a professional print shop and requesting A0 printing."
+
+QR code section: auto-generates a QR code linking to the student's 
+ScholarForge collection share URL (uses qrcode.js library).
+
+===============================================================
+PART D: PRESENTATION BUILDER
+===============================================================
+
+Create /client/src/pages/PresentationBuilder.jsx
+Create /server/routes/presentation.js
+
+POST /api/presentation accepts:
+{ collection, outline, topic, discipline, 
+  slideCount: number (10-20), presentationType: 
+  'conference' | 'seminar' | 'viva' | 'class' }
+
+Claude generates slide content:
+{
+  slides: [{
+    slideNumber: number,
+    type: 'title' | 'agenda' | 'content' | 'figure' | 
+      'conclusion' | 'references' | 'questions',
+    title: string,
+    bulletPoints: string[] (max 5, max 10 words each),
+    speakerNotes: string (what to say on this slide, 
+      full sentences, 100-150 words),
+    suggestedVisual: string (description of ideal image or diagram),
+    citations: string[] (citations needed on this slide)
+  }]
+}
+
+SLIDE RENDERER:
+16:9 HTML slides rendered at 720×405px per slide.
+Navigation: arrow buttons, slide counter, thumbnail strip.
+
+Design themes (same 4 as poster builder).
+
+Each slide editable inline.
+Speaker notes shown below each slide (not on the slide itself).
+
+Export:
+- "Download as PDF" → each slide captured with html2canvas, 
+  compiled into multi-page PDF using jsPDF
+- "Export as PowerPoint" — not attempted (too complex for 
+  reliable output) — instead: "Download HTML presentation" 
+  (self-contained HTML file that runs in any browser, 
+  full-screen mode supported via Reveal.js CDN)
+
+After completing all Module 6 parts, run final integration test:
+1. Generate a research proposal for a biomedical topic — verify 
+   all sections are present and [STUDENT: ] markers are placed 
+   correctly
+2. Generate an abstract from a Writing Studio document — verify 
+   word count is accurate
+3. Build a poster — verify all sections are editable, color 
+   themes work, export produces a readable PDF
+4. Build a 12-slide presentation — verify speaker notes are 
+   present on every slide, export works
+
+Then run a full ScholarForge integration test:
+- Search → Save → Paraphrase → Add to Writing Studio via @ → 
+  Verify bibliography updates → Export document → Check 
+  bibliography formatting in exported .docx
+
+Report final status of all 6 modules.

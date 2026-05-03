@@ -1,0 +1,178 @@
+Implement the Outline Editor and Writing Schedule Generator in 
+ScholarForge. These live at Write > Outline and Write > Schedule.
+
+===============================================================
+PART A: OUTLINE EDITOR WITH RESOURCE MATCHING
+===============================================================
+
+Create /client/src/pages/OutlineEditor.jsx
+Create /server/routes/outline.js
+
+OUTLINE DATA MODEL (localStorage sf2_outline):
+{
+  id: string,
+  title: string,
+  topic: string,
+  rawOutline: string,
+  structuredOutline: [{
+    id: string,
+    level: number (1=chapter, 2=section, 3=subsection),
+    title: string,
+    wordTarget: number,
+    notes: string,
+    resources: SearchResult[],
+    status: 'not-started' | 'in-progress' | 'complete',
+    linkedDocumentSection: string (heading in Writing Studio)
+  }],
+  supervisorFeedback: object (from Claude analysis),
+  createdAt: ISO timestamp
+}
+
+UI LAYOUT (three columns):
+
+Left (320px): Outline input and structure editor
+- Textarea for raw outline input (plain text or bullet points)
+- "Analyse outline" button (calls /api/outline/analyze)
+- After analysis: structured outline as a draggable tree
+- Each item: drag handle, title (editable), word target input,
+  status dropdown, "Find resources" button
+- Add section button at any level
+- "Link to Writing Studio" button — creates corresponding headings 
+  in the active Writing Studio document
+
+Center (flex: 1): Feedback and recommendations
+- Structure score (circular score, 1-10)
+- Issue cards (from Claude analysis) with fix suggestions
+- Suggested revision shown as a formatted outline
+- "Apply suggested revision" button
+- Word distribution chart: horizontal bars showing target vs 
+  recommended word count per section
+- Missing sections highlighted in red with explanation
+- "Standard dissertation structure for [discipline]" reference 
+  button — shows the conventional structure for their field
+
+Right (320px): Resources per section
+- Accordion: one section per outline item
+- Click to expand: shows 5 recommended papers for that section
+- Papers fetched from OpenAlex using the section title + topic 
+  as query
+- Each paper: title, authors, year, relevance note, 
+  "Add to collection" button
+- "Load more resources" button per section
+- Total resources count: "47 papers found across 8 sections"
+
+ANALYSIS PROMPT — same as previously defined, but add:
+"Also analyse whether this outline matches standard dissertation 
+structure for [discipline]. Common structures:
+
+Biomedical: Introduction → Literature Review → Methods → Results → 
+  Discussion → Conclusion
+Social Sciences: Introduction → Theoretical Framework → 
+  Literature Review → Methodology → Findings → Discussion → Conclusion
+Humanities: Introduction → [Thematic chapters] → Conclusion
+Law: Introduction → [Issue chapters] → Analysis → Conclusion
+
+Flag any structural mismatch with the discipline's convention."
+
+===============================================================
+PART B: WRITING SCHEDULE GENERATOR
+===============================================================
+
+Create /client/src/pages/ScheduleGenerator.jsx
+Create /server/routes/schedule.js
+
+This is the day-by-day writing plan feature. The emotional core: 
+a stressed student feeling overwhelmed sees a clear, achievable 
+daily plan and feels immediately less anxious.
+
+INPUT FORM:
+- Dissertation deadline (date picker)
+- Current word count (number input, default 0)
+- Target word count (from supervisor config or manual input)
+- Available writing days per week (multi-select: Mon Tue Wed Thu 
+  Fri Sat Sun) — defaults to Mon-Fri
+- Hours available per writing day (slider: 1-8 hours)
+- Current outline (auto-pulled from sf2_outline if exists, 
+  or manual entry)
+- "Buffer days" preference: how many days before deadline to finish 
+  (slider: 0-14 days, default 7 — for editing and review)
+- Thesis chapters: list of sections with their word targets 
+  (auto-pulled from outline or manual entry)
+
+POST /api/schedule accepts all above fields.
+
+CALCULATION LOGIC (do this server-side in Node, not Claude):
+1. Calculate total words remaining = target - current
+2. Calculate available writing days = days until (deadline - buffer)
+   filtered by selected days of week
+3. Calculate required words per day = total remaining / available days
+4. If words per day > 800: flag as "challenging pace" (amber)
+5. If words per day > 1200: flag as "high intensity" (red) with 
+   suggestion to negotiate deadline extension
+6. If words per day < 300: flag as "comfortable pace" (green)
+7. Distribute word targets across days:
+   - First 20% of days: heavier targets (research-heavy phase)
+   - Middle 60%: steady writing pace
+   - Last 20%: lighter targets (editing and review phase)
+8. Assign sections to days based on section word targets:
+   e.g. "Monday 14 July: Literature Review section 2 (750 words)"
+
+Then send the computed schedule to Claude for enhancement:
+"Here is a computed writing schedule for a student.
+Convert it into a warm, encouraging, specific daily plan.
+For each day, add: a specific task description, one motivating 
+sentence, and one practical tip relevant to that day's work.
+
+Schedule: [computed JSON]
+
+Return the enhanced schedule as JSON with the same structure 
+plus 'taskDescription', 'motivation', and 'tip' fields per day."
+
+SCHEDULE UI:
+Calendar view (weekly grid, Mon-Sun):
+- Writing days: --sf-mint-light background
+- Non-writing days: --sf-surface-2 background, "Rest day" label
+- Each writing day cell shows:
+  - Word target (bold, large)
+  - Section being worked on
+  - Task description (Claude-enhanced)
+  - Tip (collapsed by default, expand on click)
+  - Progress indicator (updates as user logs actual words written)
+
+List view toggle (for mobile):
+- Day-by-day vertical list
+- Same information as calendar
+
+Progress tracking:
+- "Log today's words" button: input actual words written today
+- Progress bar per week showing actual vs target
+- Running total: "You've written 3,240 words in 6 days. 
+  6,760 words to go. You're 2 days ahead of schedule."
+
+Milestone celebrations:
+- 25% complete: "Quarter of the way there!"
+- 50% complete: "Halfway! The hardest part is behind you."
+- 75% complete: "Almost there. You've built something real."
+- 100% complete: "First draft complete. Now make it great."
+
+These appear as toast notifications when milestones are crossed.
+Stored in sf2_schedule so they only trigger once.
+
+Export schedule:
+- "Download as PDF" → generates a printable calendar using 
+  html2canvas on the calendar view
+- "Add to Google Calendar" → generates an ICS file the user 
+  can import to any calendar application
+- "Share with supervisor" → generates a read-only link 
+  showing the student's plan
+
+After completing Module 3, test:
+1. Enter a real dissertation outline and verify AI feedback quality
+2. Check resource matching returns relevant papers for each section
+3. Generate a schedule for a student with 30 days and 8000 words 
+   remaining, verify daily targets make sense
+4. Log words for 3 days and verify progress tracking updates
+5. Export schedule to ICS and verify it imports correctly to 
+   Google Calendar
+
+Report results before proceeding to Module 4.

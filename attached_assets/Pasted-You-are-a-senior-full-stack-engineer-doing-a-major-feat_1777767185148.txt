@@ -1,0 +1,62 @@
+You are a senior full-stack engineer doing a major feature expansion 
+on ScholarForge — an existing, working academic research tool. The 
+codebase already has: search (PubMed + Semantic Scholar + OpenAlex), 
+snippet collection, AI paraphraser, citation engine, gap finder, lit 
+review composer, argument mapper, writing coach, originality checker, 
+visual sourcer, and a full security hardening layer.
+
+You are now integrating 6 major new feature modules into this existing 
+codebase. Do NOT rebuild anything that already exists. Extend it.
+
+INTEGRATION PHILOSOPHY:
+- Every new feature must feel like it belongs in ScholarForge — 
+  same design system, same CSS variables, same component patterns
+- Every new feature degrades gracefully: if an API fails, the user 
+  gets a helpful fallback, never a blank screen or crash
+- Every new feature that calls Claude must go through the existing 
+  prompt injection protection in /server/lib/safeFetch.js and the 
+  existing validateClaudeResponse() function
+- Every new route must have rate limiting via the existing 
+  express-rate-limit configuration
+- localStorage keys must not conflict with existing ones — 
+  all new keys are prefixed sf2_ to distinguish from original sf_ keys
+- All new components follow the existing CSS variable system 
+  (--sf-mint, --sf-surface, --sf-text-1, etc.)
+
+NAVIGATION RESTRUCTURE — do this first, before any new features:
+Update the top navigation to a two-tier system:
+
+Tier 1 (always visible, primary nav):
+[ Write ] [ Search ] [ Collection ] [ Analyse ] [ Tools ]
+
+Tier 2 (contextual sub-nav, appears below tier 1 when section active):
+Write:      [ Studio ] [ Outline ] [ Schedule ]
+Search:     [ Papers ] [ Question Answering ] [ Connected Papers ]
+Collection: [ My Collection ] [ Reading List ] [ PDF Library ]
+Analyse:    [ Gap Finder ] [ Argument Map ] [ Citation Context ]
+Tools:      [ Writing Coach ] [ Originality ] [ Journal Finder ] 
+            [ Methodology ] [ Poster Builder ] [ Abstract Generator ]
+
+The sub-nav slides down with a 0.2s ease animation when a top-level 
+section is clicked. Active items are highlighted with --sf-mint color 
+and a 2px bottom border.
+
+Mobile: top nav collapses to a hamburger. Sub-nav becomes a 
+bottom sheet with large tap targets.
+
+After restructuring navigation, implement each module below in the 
+exact order listed. Do not start the next module until the current 
+one is complete and tested.
+
+ORDER OF IMPLEMENTATION:
+1. Reading Gap module (PDF Library + PDF Chat + Reading List + 
+   Concept Explainer)
+2. Writing Studio expansion (full live editor with @ citations + 
+   auto-bibliography)
+3. Outline Editor + Resource Matching + Schedule Generator
+4. Collaboration features (Supervisor Portal + Study Groups)
+5. Language Support (Academic English Polish + Multilingual abstracts)
+6. Output generators (Poster, Presentation, Abstract, Proposal)
+
+Begin with Module 1 now. After completing and confirming Module 1 
+works, wait for instruction before proceeding to Module 2.

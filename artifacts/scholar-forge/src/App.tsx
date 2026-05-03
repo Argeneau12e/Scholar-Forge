@@ -14,6 +14,16 @@ import PaperGraphPage from "@/pages/papergraph";
 import WritingStudioPage from "@/pages/studio";
 import OutlinePage from "@/pages/outline";
 import JournalsPage from "@/pages/journals";
+import SchedulePage from "@/pages/schedule";
+import ReadingListPage from "@/pages/reading-list";
+import PDFLibraryPage from "@/pages/pdf-library";
+import GapsPage from "@/pages/gaps";
+import ArgmapPage from "@/pages/argmap";
+import CiteContextPage from "@/pages/citecontext-page";
+import PosterPage from "@/pages/poster";
+import AbstractPage from "@/pages/abstract";
+import FeedbackPage from "@/pages/feedback";
+import LanguagePage from "@/pages/language";
 import { Layout } from "@/components/layout";
 
 const queryClient = new QueryClient();
@@ -33,6 +43,16 @@ function Router() {
         <Route path="/studio" component={WritingStudioPage} />
         <Route path="/outline" component={OutlinePage} />
         <Route path="/journals" component={JournalsPage} />
+        <Route path="/schedule" component={SchedulePage} />
+        <Route path="/reading-list" component={ReadingListPage} />
+        <Route path="/pdf-library" component={PDFLibraryPage} />
+        <Route path="/gaps" component={GapsPage} />
+        <Route path="/argmap" component={ArgmapPage} />
+        <Route path="/citecontext-page" component={CiteContextPage} />
+        <Route path="/poster" component={PosterPage} />
+        <Route path="/abstract" component={AbstractPage} />
+        <Route path="/feedback" component={FeedbackPage} />
+        <Route path="/language" component={LanguagePage} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

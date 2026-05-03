@@ -1,0 +1,323 @@
+Implement the Reading Gap module in ScholarForge. This lives under 
+the Collection > PDF Library and Collection > Reading List sub-navs.
+
+This module transforms ScholarForge from a snippet tool into the 
+place where students actually READ their papers — making it a 
+daily-use habit tool.
+
+===============================================================
+PART A: PDF LIBRARY
+===============================================================
+
+Install: pdfjs-dist, @mozilla/readability (already installed 
+  for URL extraction — reuse)
+
+Create /client/src/pages/PDFLibrary.jsx
+Create /server/routes/pdf.js
+
+DATABASE STRUCTURE (localStorage key: sf2_pdf_library):
+[{
+  id: string (uuid),
+  title: string,
+  authors: string[],
+  year: number,
+  doi: string,
+  journal: string,
+  filename: string,
+  extractedText: string (full text, stored after processing),
+  pageCount: number,
+  addedAt: ISO timestamp,
+  readingStatus: 'unread' | 'reading' | 'finished',
+  readingProgress: number (0-100, percentage),
+  highlights: [{
+    id: string,
+    text: string,
+    pageIndex: number,
+    color: 'yellow' | 'green' | 'blue' | 'pink',
+    note: string,
+    addedAt: ISO timestamp
+  }],
+  notes: [{
+    id: string,
+    content: string,
+    pageIndex: number,
+    addedAt: ISO timestamp
+  }],
+  summary: string (AI summary, generated on demand),
+  keyPoints: string[] (AI extracted, generated on demand),
+  addedToCollection: boolean
+}]
+
+PDF UPLOAD FLOW:
+- Drag-and-drop zone on the PDF Library page
+- Also: a "Find free PDF" button on any search result card that 
+  calls Unpaywall with the DOI and downloads directly if available
+- Also: paste a direct PDF URL — server fetches and processes it
+- On upload:
+  1. Extract text using pdfjs-dist on the client side
+  2. Auto-detect metadata: try to extract title, authors, DOI 
+     from the first page text using regex patterns
+  3. If DOI found, fetch full metadata from CrossRef to fill gaps
+  4. Store in sf2_pdf_library with status 'unread'
+  5. Show toast: "PDF added to your library"
+
+PDF VIEWER:
+Create /client/src/components/PDFViewer.jsx
+
+Use pdfjs-dist to render PDF pages as canvas elements.
+Layout: 
+- Left panel (280px): document outline/bookmarks, page thumbnails
+- Center: rendered PDF pages, scrollable
+- Right panel (320px, collapsible): Chat, Highlights, Notes tabs
+
+Controls toolbar above viewer:
+- Page navigation (prev/next, jump to page number)
+- Zoom (50% to 200%, fit-width button)
+- Search within PDF (text search, highlights all matches)
+- Reading progress indicator (thin progress bar at very top, 
+  updates as user scrolls)
+
+HIGHLIGHT SYSTEM:
+- User selects text in the PDF → floating toolbar appears with:
+  - Color picker (yellow, green, blue, pink)
+  - "Highlight" button
+  - "Add note" button
+  - "Add to collection" button (saves as a snippet)
+  - "Explain this" button (sends to Concept Explainer)
+- Highlights rendered as colored overlays on the PDF canvas
+- Highlights listed in right panel under "Highlights" tab
+- Click any highlight in the list → scrolls to that page
+
+NOTES SYSTEM:
+- Click any blank area of the PDF while holding Shift → creates 
+  a sticky note at that position
+- Notes shown as small colored squares on the page
+- Notes listed in right panel under "Notes" tab
+- Notes are searchable
+
+===============================================================
+PART B: PDF CHAT
+===============================================================
+
+Create /server/routes/pdfchat.js
+
+POST /api/pdf/chat accepts:
+{
+  pdfId: string,
+  message: string,
+  conversationHistory: [{role: 'user'|'assistant', content: string}],
+  extractedText: string (max 15000 chars, chunked if longer)
+}
+
+Text chunking strategy for long PDFs:
+If extractedText > 15000 chars:
+- Always include first 2000 chars (abstract/intro)
+- Always include last 1000 chars (conclusion)
+- Search remaining text for chunks most relevant to the user's 
+  question using keyword overlap
+- Fill remaining context with highest-scoring chunks
+
+SYSTEM PROMPT (use exactly):
+"You are an academic research assistant helping a student understand 
+a research paper. You have access to the paper's text below. 
+
+Rules:
+- Answer only from the paper's content — never fabricate findings
+- If the answer is not in the provided text, say exactly: 
+  'This information is not in the section of the paper I can see. 
+  Try asking about [related topic that IS in the text].'
+- Use the student's discipline level — explain jargon when you use it
+- When quoting, always give the approximate location 
+  (e.g. 'In the Methods section...' or 'The authors state in their 
+  Discussion...')
+- Keep answers concise unless the student asks for detail
+- If asked to summarise, structure as: Background | Methods | 
+  Key Findings | Limitations | Relevance to student
+
+Paper text:
+=== DOCUMENT START ===
+[extractedText]
+=== DOCUMENT END ==="
+
+Streaming response: use Claude streaming API so words appear 
+immediately. Stream to client via Server-Sent Events.
+
+Rate limit: 30 PDF chat messages per IP per hour.
+
+UI — Chat panel (right side of PDF Viewer):
+- Message history with role-based styling (user right, assistant left)
+- Input box at bottom (send on Enter, Shift+Enter for newline)
+- Suggested questions shown as pills when chat is empty:
+  "Summarise this paper"
+  "What method did they use?"
+  "What were the limitations?"
+  "How does this relate to [topic]?" (auto-fills with user's thesis topic)
+  "What can I cite from this paper?"
+- "Add to collection" button on any assistant message that contains 
+  a finding or quote
+- "Copy with citation" button that copies the quoted text + formatted 
+  citation for the paper
+- Conversation saved to sf2_pdf_library[id].chatHistory
+- "Clear chat" button
+
+QUICK ACTIONS (toolbar buttons in viewer):
+- "Summarise paper" → sends pre-built prompt, returns structured 
+  summary stored in sf2_pdf_library[id].summary
+- "Extract key points" → returns 5-7 bullet points of main findings
+  stored in sf2_pdf_library[id].keyPoints
+- "Find citations I can use" → Claude identifies the 3-5 most 
+  citable, quotable findings with exact text and suggested context
+- "Compare to my thesis" → sends thesis from sf_thesis + paper text, 
+  Claude explains how this paper supports, challenges, or is neutral 
+  on the thesis
+
+===============================================================
+PART C: READING LIST
+===============================================================
+
+Create /client/src/components/ReadingList.jsx
+
+This is the queue manager — the organisational layer that creates 
+the reading habit.
+
+Three columns (kanban-style):
+[ To Read ] [ Currently Reading ] [ Finished ]
+
+Each paper card shows:
+- Cover colour (auto-generated from paper title hash — gives visual 
+  distinctiveness without needing cover images)
+- Title (truncated to 2 lines)
+- Authors + year
+- Journal (if available)
+- Reading progress bar (for 'Currently Reading' column)
+- Tag chips
+- "Open PDF" button (if PDF uploaded) or "Find free PDF" button
+- "Add to collection" button (if not already in collection)
+
+Drag cards between columns to update reading status.
+Status changes sync back to sf2_pdf_library.
+
+Stats bar at top of Reading List:
+"12 papers to read · 3 in progress · 8 finished · 
+~14 hours of reading remaining"
+
+Reading time estimation: 200 words per minute average, 
+calculated from extractedText length.
+
+"Finished" column actions:
+- "What I learned" button → opens a mini journal entry for that paper
+- "Summarise for later" button → generates AI summary and stores it
+- "Add all findings to collection" button
+
+Reading list is also populated automatically:
+- When user saves a snippet from search results, paper is added 
+  to "To Read" if not already in library
+- When user adds a paper from Connected Papers graph, added to 
+  "To Read" automatically
+
+===============================================================
+PART D: CONCEPT EXPLAINER
+===============================================================
+
+Create /server/routes/concept.js
+Create /client/src/components/ConceptExplainer.jsx
+
+This is accessible from THREE entry points:
+1. Highlight text in PDF Viewer → "Explain this" button
+2. Right-click any text in Writing Studio → "Explain this term"
+3. A standalone search box on the Tools menu
+
+POST /api/concept accepts:
+{
+  term: string,
+  context: string (surrounding sentence, optional),
+  discipline: string
+}
+
+SYSTEM PROMPT:
+"You are an expert academic tutor who can explain any concept at 
+exactly the right level. You are patient, clear, and never 
+condescending. You use examples from real research where possible."
+
+USER PROMPT:
+"Explain '[term]' to a university student studying [discipline].
+[If context provided]: It appears in this context: '[context]'
+
+Return ONLY this JSON:
+{
+  simple: string (explanation for someone with no background — 
+    2-3 sentences, no jargon, use an everyday analogy),
+  student: string (explanation for a student studying this — 
+    4-5 sentences, correct terminology, one example from the field),
+  technical: string (full academic definition with precision — 
+    as it would appear in a methods textbook),
+  etymology: string (where the word/term comes from, if interesting),
+  relatedTerms: string[] (3-5 related concepts worth knowing),
+  commonMistake: string (the most common misconception about this 
+    term, one sentence — omit if none),
+  disciplines: string[] (which academic disciplines use this term)
+}"
+
+After getting Claude's response:
+Search OpenAlex for papers that explain or introduce this concept:
+GET https://api.openalex.org/works?search=[term]&sort=cited_by_count:desc
+  &filter=open_access.is_oa:true&per-page=3
+Return top 3 as "further reading" papers.
+
+UI — ConceptExplainer component:
+Rendered as a sliding panel from the right (400px wide) rather 
+than a modal — so the student can keep reading while the 
+explanation is visible.
+
+Layout:
+- Term as heading (Lora serif, 22px)
+- Three tabs: [ Simple ] [ Student ] [ Technical ]
+- Default tab: Student
+- Etymology shown below tabs in small italic gray text
+- Related terms as clickable pills (clicking a pill explains that term)
+- Common mistake shown in amber warning card if present
+- Further reading: 3 paper cards at bottom with "Add to collection" 
+  buttons
+- "Copy definition" button
+- "Add to my glossary" button (saves to sf2_glossary in localStorage)
+
+PERSONAL GLOSSARY:
+Saved concepts stored in localStorage sf2_glossary:
+[{ term, simpleExplanation, savedAt, discipline }]
+
+Accessible from Tools > Glossary as a searchable, alphabetical list.
+Export as a PDF "personal glossary document" for revision use.
+
+===============================================================
+PART E: READING ANALYTICS
+===============================================================
+
+Create /client/src/components/ReadingDashboard.jsx
+Accessible from Collection > Reading List > "Analytics" tab
+
+Shows:
+- Papers read this week (bar chart by day, using recharts or 
+  pure SVG)
+- Reading streak: consecutive days with reading activity
+- Time spent reading (estimated from progress changes + timestamps)
+- Concepts explained (from sf2_glossary count)
+- Topics distribution: pie chart of disciplines/topics in library
+- "Your reading pace": at current rate, you'll finish your reading 
+  list in X days — compared to your dissertation deadline
+
+All calculated from localStorage data — no server needed.
+Displayed with ScholarForge's design system: mint accents, 
+clean cards, no gratuitous gamification.
+
+After completing all five parts of Module 1, run a full integration 
+test:
+1. Upload a real PDF (use an arXiv paper URL for testing)
+2. Verify text extraction works
+3. Send 3 chat messages and verify responses are accurate
+4. Add 3 papers to reading list and drag between columns
+5. Explain a term from inside the PDF viewer
+6. Save a concept to the personal glossary
+7. Verify reading analytics update correctly
+
+Report which parts passed and which need fixes before confirming 
+Module 1 complete.

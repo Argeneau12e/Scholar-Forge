@@ -1,0 +1,242 @@
+Implement the full Writing Studio in ScholarForge. This is the 
+flagship feature — where students write their entire dissertation 
+inside ScholarForge with live citation insertion and auto-bibliography.
+
+This lives at Write > Studio in the navigation.
+
+===============================================================
+PART A: CORE EDITOR
+===============================================================
+
+Install: @tiptap/react @tiptap/starter-kit @tiptap/extension-placeholder
+  @tiptap/extension-character-count @tiptap/extension-highlight
+  @tiptap/extension-typography @tiptap/extension-underline
+  @tiptap/extension-text-align @tiptap/extension-color
+  @tiptap/extension-mention
+
+Create /client/src/pages/WritingStudio.jsx
+Create /client/src/components/editor/ScholarEditor.jsx
+
+DOCUMENT DATA MODEL (localStorage sf2_documents):
+[{
+  id: string (uuid),
+  title: string,
+  content: string (Tiptap JSON format),
+  wordCount: number,
+  deadline: ISO date (from supervisor config),
+  targetWords: number,
+  citations: [{
+    citationKey: string (e.g. "dawson2022"),
+    paperId: string (from collection),
+    inlineText: string (e.g. "(Dawson et al., 2022)" or "[14]"),
+    style: string
+  }],
+  bibliography: CollectionItem[] (ordered alphabetically),
+  createdAt: ISO timestamp,
+  updatedAt: ISO timestamp,
+  snapshots: [{content, timestamp}] (last 20, auto-saved every 30min),
+  wordGoalToday: number,
+  wordsWrittenToday: number
+}]
+
+EDITOR LAYOUT (three-panel):
+
+Left panel (220px, collapsible):
+- Document title (editable inline)
+- Document outline: extracted H1/H2/H3 headings, clickable to jump
+- Word count breakdown by section
+- "New document" button
+- Document list (switch between multiple docs)
+- Daily goal progress bar
+
+Center panel (flex: 1, max-width 740px, centered):
+- Floating toolbar (sticky, appears above editor):
+  Bold | Italic | Underline | H1 | H2 | H3 | 
+  Bullet list | Numbered list | Block quote | 
+  Align left/center | Insert citation (@) | 
+  AI assist (✦) | Distraction-free mode (⤢)
+- Tiptap editor area
+  - Min height: 100vh
+  - Font: Georgia or Lora serif, 16px, line-height 1.8
+  - Paragraph spacing: 1.2em
+  - Placeholder: "Start writing, or type @ to insert a citation..."
+  - Page break simulation: every ~500 words, show a subtle horizontal 
+    divider with page number (visual only, not printed)
+- Status bar (fixed bottom):
+  [Word count: 2,847] [Target: 10,000] [■■■□□□□□□□ 28%] 
+  [Last saved: 12 seconds ago] [Reading time: ~14 min]
+
+Right panel (280px, collapsible, tabbed):
+Tab 1: Bibliography (auto-populated, live)
+Tab 2: Comments and suggestions
+Tab 3: AI suggestions panel
+Tab 4: Version history
+
+===============================================================
+PART B: CITATION INSERTION SYSTEM
+===============================================================
+
+Extend the Tiptap editor with a custom @mention extension for citations.
+
+When user types @ in the editor:
+1. A floating citation picker appears (320px wide, appears above 
+   the cursor position)
+2. The picker has a search input — searching queries BOTH:
+   a. The user's saved collection (instant, no API call)
+   b. OpenAlex live search (debounced 500ms, shows "Searching..." 
+      while loading)
+3. Results shown as a list with paper title, authors, year, 
+   and source badge (Collection / OpenAlex)
+4. Keyboard navigable (arrow keys to select, Enter to insert)
+5. On selection:
+   - Insert inline citation node in the editor
+   - Citation node renders as a non-editable chip:
+     "(Dawson et al., 2022)" for author-date styles
+     "[14]" for numbered styles (Vancouver)
+   - Citation chip is clickable → shows full reference card in right panel
+   - Citation chip has a × button to remove (with undo toast)
+   - If paper not already in collection, automatically add it
+   - Bibliography in right panel updates immediately
+
+Citation node data model (Tiptap custom node):
+{
+  type: 'citation',
+  attrs: {
+    citationKey: string,
+    paperId: string,
+    inlineText: string,
+    doi: string
+  }
+}
+
+Citation rendering:
+For author-date styles (APA, Harvard, Chicago):
+"(First Author et al., Year)" for 3+ authors
+"(Author & Author, Year)" for 2 authors  
+"(Author, Year)" for 1 author
+For numbered styles (Vancouver, MLA):
+"[N]" where N is the order of first appearance in the document
+
+When a citation is removed from the text:
+- Remove from bibliography (with 5-second undo toast)
+- Renumber all subsequent citations for numbered styles
+
+===============================================================
+PART C: AUTO-BIBLIOGRAPHY
+===============================================================
+
+Create /client/src/components/editor/BibliographyPanel.jsx
+
+This lives in the right panel of the Writing Studio.
+
+REAL-TIME BEHAVIOUR:
+- Listens to Tiptap editor content changes
+- Extracts all citation nodes from the document
+- For author-date styles: sorts alphabetically by first author surname
+- For numbered styles (Vancouver): sorts by order of first appearance 
+  in text
+- Formats each using the existing Citation.js engine
+- Renders the formatted list in the panel
+
+DISPLAY:
+- Each bibliography entry as a line item with:
+  - Line number (for Vancouver)
+  - Formatted citation text
+  - Small icons: copy (copies this citation), open DOI, remove
+- "Copy all" button: copies entire bibliography as plain text
+- "Export bibliography" button: opens existing export modal 
+  pre-populated with this document's references
+- Style indicator at top: "Vancouver format · 14 references"
+- Warning if any reference is missing required fields 
+  (e.g. missing year): amber highlight on that entry with 
+  "Incomplete — verify manually" tooltip
+
+CONFLICT DETECTION:
+If the same paper is cited twice with slightly different metadata 
+(e.g. once from collection, once from OpenAlex with different 
+author list), show a merge warning:
+"Two entries for [Title]. Which is correct?"
+Allow user to select the correct one — merges all citations to 
+use the selected metadata.
+
+===============================================================
+PART D: INLINE AI ASSISTANCE
+===============================================================
+
+When user selects any text in the editor, show a floating 
+action bar with these options:
+
+"Improve ✦" → POST /api/coach with selection, returns rewrite
+"Cite ✦" → searches for papers supporting the selected claim
+"Simplify ✦" → returns plain English version of selection
+"Academic ✦" → makes language more formally academic
+"Expand ✦" → adds 2-3 sentences developing the point
+"Hedge ✦" → adds appropriate academic qualification language
+
+Each action:
+1. Shows loading state inline ("Improving...")
+2. Returns suggestion in a diff view — original crossed out, 
+   new version shown in --sf-mint
+3. "Accept" button replaces selection with suggestion
+4. "Reject" button restores original
+5. Rejected suggestions logged so the same suggestion isn't 
+   offered again
+
+COMMAND PALETTE (Cmd+K or Ctrl+K anywhere in editor):
+Opens a searchable command menu with all AI actions plus:
+- "Set writing goal for today" → updates daily word target
+- "Check originality of this paragraph" → sends selection to 
+  plagiarism checker
+- "Find papers for this section" → runs a search based on 
+  the surrounding paragraph context
+- "Insert subheading" → suggests appropriate H2/H3 text based 
+  on surrounding content
+- "Summarise what I've written so far" → Claude reads entire 
+  document and returns a 3-sentence summary
+
+===============================================================
+PART E: DISTRACTION-FREE MODE
+===============================================================
+
+Toggle with F11 or the ⤢ button in the toolbar.
+
+Hides: navigation, both panels, toolbar, status bar
+Shows: only the white writing surface, centered, 700px max-width
+Floating word count: bottom center, very small, --sf-text-3 color
+Daily goal: a thin colored line at the very bottom of viewport,
+  grows right as words are written (green when goal hit)
+Exit: press Escape or move mouse to very top of screen (reveals 
+  a minimal exit button)
+
+===============================================================
+PART F: VERSION HISTORY
+===============================================================
+
+Auto-snapshot system:
+- Every 30 minutes while the document has unsaved changes, save 
+  a snapshot to sf2_documents[id].snapshots
+- Keep maximum 20 snapshots (FIFO — oldest removed when 21st added)
+- Manual snapshot: "Save version" button in right panel
+
+Version history panel (right panel tab):
+- Timeline of snapshots (newest first)
+- Each shows: timestamp, word count at that point, 
+  "words added" since previous snapshot
+- Click snapshot: shows a preview panel with the document content 
+  at that point (read-only)
+- "Restore this version" button: replaces current content after 
+  confirmation dialog ("This will replace your current draft. 
+  Your current version will be saved first.")
+
+After completing Writing Studio:
+Test the full writing flow:
+1. Create a new document
+2. Write 3 paragraphs with @ citation insertions
+3. Verify bibliography updates alphabetically in real time
+4. Test all inline AI actions on selected text
+5. Enable distraction-free mode and verify correct behaviour
+6. Make changes, wait 30 minutes (or trigger manually for testing), 
+   verify snapshot created
+7. Restore a previous version and verify content restores correctly
+
+Report results before proceeding to Module 3.

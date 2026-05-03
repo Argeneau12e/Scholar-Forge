@@ -20,6 +20,12 @@ import outlineRouter from "./outline";
 import journalsRouter from "./journals";
 import digestRouter from "./digest";
 import methodologyRouter from "./methodology";
+import scheduleRouter from "./schedule";
+import posterRouter from "./poster";
+import abstractRouter from "./abstract";
+import pdfchatRouter from "./pdfchat";
+import conceptRouter from "./concept";
+import languageRouter from "./language";
 
 const router: IRouter = Router();
 
@@ -44,5 +50,11 @@ router.use(outlineRouter);
 router.use(journalsRouter);
 router.use(digestRouter);
 router.use(methodologyRouter);
+router.use(scheduleRouter);
+router.use(posterRouter);
+router.use(abstractRouter);
+router.use(pdfchatRouter);
+router.use(conceptRouter);
+router.use(languageRouter);
 
 export default router;
