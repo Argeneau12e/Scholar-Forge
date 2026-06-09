@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import rateLimit from "express-rate-limit";
 import { wrapUserText } from "../lib/promptSafety";
 
@@ -10,167 +10,192 @@ const langLimiter = rateLimit({
   max: 40,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: "Too many language requests. Please wait." },
+  message: { error: "Too many language requests. Please wait before trying again." },
 });
 
-const SUPPORTED_LANGUAGES = [
-  "Arabic", "Chinese (Simplified)", "Chinese (Traditional)", "Dutch", "French",
-  "German", "Hindi", "Indonesian", "Italian", "Japanese", "Korean",
-  "Polish", "Portuguese", "Russian", "Spanish", "Swedish", "Turkish", "Vietnamese",
-];
+// ─── POST /api/language/check ─────────────────────────────────────────────────
 
-// POST /api/language/check — ESL writing check
 router.post("/language/check", langLimiter, async (req, res): Promise<void> => {
-  const { text, nativeLanguage = "not specified", targetRegister = "academic" } = req.body as {
-    text: string; nativeLanguage?: string; targetRegister?: string;
+  const { text, nativeLanguage = "unknown", discipline = "general" } = req.body as {
+    text?: string;
+    nativeLanguage?: string;
+    discipline?: string;
   };
 
-  if (!text || text.trim().length < 20) { res.status(400).json({ error: "text is required (min 20 chars)" }); return; }
-  if (text.length > 8000) { res.status(400).json({ error: "Text too long (max 8000 chars)" }); return; }
+  if (!text || text.trim().length < 20) { res.status(400).json({ error: "text must be at least 20 characters" }); return; }
+  if (text.length > 5000) { res.status(400).json({ error: "text too long (max 5000 chars)" }); return; }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) { res.status(503).json({ error: "AI features not configured" }); return; }
+  const apiKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
+  if (!apiKey) {
+    res.status(401).json({ error: "GROQ_API_KEY_REQUIRED", message: "Please provide your Groq API key to use AI features." }); return;
+  }
 
-  const client = new Anthropic({ apiKey });
-  const safeText = wrapUserText(text.slice(0, 6000));
-  const safeLang = (nativeLanguage ?? "").slice(0, 100);
+  const client = new Groq({ apiKey });
+  const safeText = wrapUserText(text.slice(0, 5000));
 
-  try {
-    const resp = await client.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 1500,
-      system: "You are an expert academic writing coach specialising in helping non-native English speakers write at a high academic level. Return ONLY valid JSON.",
-      messages: [{
+  const msg = await client.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    max_tokens: 2000,
+    messages: [
+      {
+        role: "system",
+        content: "You are an expert academic English writing coach specialising in helping ESL students write clear, formal academic prose. Return ONLY valid JSON.",
+      },
+      {
         role: "user",
-        content: `Analyse this ${targetRegister} text written by a non-native English speaker whose native language is ${safeLang || "unknown"}:
+        content: `Analyse this ${discipline} academic writing from an ESL student (native language: ${nativeLanguage}).
 
+Text:
 ${safeText}
 
-Return ONLY this JSON (no markdown):
+Return ONLY this JSON:
 {
-  "overallScore": 7,
-  "registrerScore": 7,
-  "clarityScore": 7,
-  "grammarScore": 7,
-  "summary": "2-3 sentence overall assessment",
+  "scores": {
+    "overall": 7,
+    "grammar": 7,
+    "register": 7,
+    "clarity": 7
+  },
   "issues": [
     {
-      "type": "grammar|register|clarity|vocabulary|preposition|article|syntax",
-      "original": "exact quoted problematic phrase (max 80 chars)",
-      "suggestion": "corrected version",
-      "explanation": "why this is an issue (1 sentence)",
-      "priority": "high|medium|low"
+      "type": "grammar|register|clarity|vocabulary|structure",
+      "quote": "exact problematic phrase max 10 words",
+      "explanation": "what is wrong",
+      "suggestion": "improved version"
     }
   ],
   "positives": ["strength 1", "strength 2"],
-  "vocabularyGaps": ["term you should know", "term you should know"],
-  "l1Interference": "If the native language is known, describe typical L1 interference patterns — 1 sentence. Empty string if unknown.",
-  "rewrittenParagraph": "If text is a single paragraph, rewrite it at a high academic level. Otherwise empty string."
-}`,
-      }],
-    });
+  "vocabularyGaps": ["word/phrase that should be avoided or upgraded"],
+  "l1Interference": "one sentence on any patterns suggesting L1 interference (or null)",
+  "suggestedRewrite": "improved version of the full text preserving meaning"
+}
+Scores 1-10. Identify up to 5 real issues only.`,
+      },
+    ],
+  });
 
-    const raw = resp.content[0]?.type === "text" ? resp.content[0].text : "{}";
-    const match = raw.match(/\{[\s\S]*\}/);
-    const data = match ? JSON.parse(match[0]) : {};
-    res.json(data);
-  } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Failed" });
-  }
+  const raw = msg.choices[0]?.message?.content ?? "{}";
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) { res.status(502).json({ error: "Could not parse AI response" }); return; }
+  res.json(JSON.parse(match[0]));
 });
 
-// POST /api/language/translate — translate academic text
+// ─── POST /api/language/translate ────────────────────────────────────────────
+
 router.post("/language/translate", langLimiter, async (req, res): Promise<void> => {
-  const { text, targetLanguage, preserveFormatting = true } = req.body as {
-    text: string; targetLanguage: string; preserveFormatting?: boolean;
+  const { text, targetLanguage, discipline = "general", preserveTerms = true } = req.body as {
+    text?: string;
+    targetLanguage?: string;
+    discipline?: string;
+    preserveTerms?: boolean;
   };
 
-  if (!text || text.trim().length < 5) { res.status(400).json({ error: "text is required" }); return; }
-  if (text.length > 5000) { res.status(400).json({ error: "Text too long (max 5000 chars)" }); return; }
-  if (!targetLanguage || !SUPPORTED_LANGUAGES.some((l) => l.toLowerCase() === targetLanguage.toLowerCase())) {
-    res.status(400).json({ error: `Unsupported language. Supported: ${SUPPORTED_LANGUAGES.join(", ")}` });
-    return;
+  if (!text || text.trim().length < 10) { res.status(400).json({ error: "text must be at least 10 characters" }); return; }
+  if (!targetLanguage || targetLanguage.trim().length === 0) { res.status(400).json({ error: "targetLanguage is required" }); return; }
+  if (text.length > 5000) { res.status(400).json({ error: "text too long (max 5000 chars)" }); return; }
+
+  const apiKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
+  if (!apiKey) {
+    res.status(401).json({ error: "GROQ_API_KEY_REQUIRED", message: "Please provide your Groq API key to use AI features." }); return;
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) { res.status(503).json({ error: "AI features not configured" }); return; }
+  const client = new Groq({ apiKey });
+  const safeText = wrapUserText(text.slice(0, 5000));
+  const safeLang = targetLanguage.slice(0, 50);
+  const termNote = preserveTerms
+    ? "Keep technical/scientific terms in English (or provide them in parentheses after the translation if they have a standard equivalent)."
+    : "Translate all terms, including technical ones.";
 
-  const client = new Anthropic({ apiKey });
-  const safeText = wrapUserText(text.slice(0, 4000));
-
-  try {
-    const resp = await client.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 2000,
-      system: `You are a professional academic translator. Translate with precision, preserving technical terminology, academic register, and structure. Return ONLY valid JSON.`,
-      messages: [{
+  const msg = await client.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    max_tokens: 2000,
+    messages: [
+      {
+        role: "system",
+        content: `You are an expert academic translator. You translate academic texts with high fidelity, preserving academic register and meaning. Return ONLY valid JSON.`,
+      },
+      {
         role: "user",
-        content: `Translate this academic text to ${targetLanguage}. Preserve all formatting, headings, and academic register.
+        content: `Translate this ${discipline} academic text into ${safeLang}. ${termNote}
 
-Text to translate:
+Text:
 ${safeText}
 
 Return ONLY this JSON:
 {
   "translation": "the full translated text",
-  "notes": "any important translation notes — e.g. terms that have no direct equivalent, or regional variations (max 3 bullet points as a plain string, or empty string)",
-  "technicalTerms": [{"source": "English term", "target": "translated term"}]
-}`,
-      }],
-    });
+  "glossary": [
+    { "original": "English term", "translated": "translated term", "note": "optional brief note" }
+  ],
+  "notes": "any translation challenges or important caveats (or null)"
+}
+Include up to 10 key technical terms in glossary.`,
+      },
+    ],
+  });
 
-    const raw = resp.content[0]?.type === "text" ? resp.content[0].text : "{}";
-    const match = raw.match(/\{[\s\S]*\}/);
-    const data = match ? JSON.parse(match[0]) : {};
-    res.json({ ...data, targetLanguage });
-  } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Failed" });
-  }
+  const raw = msg.choices[0]?.message?.content ?? "{}";
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) { res.status(502).json({ error: "Could not parse AI response" }); return; }
+  res.json(JSON.parse(match[0]));
 });
 
-// POST /api/language/simplify — plain language version + back-translation
+// ─── POST /api/language/simplify ─────────────────────────────────────────────
+
 router.post("/language/simplify", langLimiter, async (req, res): Promise<void> => {
-  const { text, targetLanguage = "English", readingLevel = "undergraduate" } = req.body as {
-    text: string; targetLanguage?: string; readingLevel?: string;
+  const { text, targetLanguage, discipline = "general" } = req.body as {
+    text?: string;
+    targetLanguage?: string;
+    discipline?: string;
   };
 
-  if (!text || text.trim().length < 20) { res.status(400).json({ error: "text is required" }); return; }
-  if (text.length > 5000) { res.status(400).json({ error: "Text too long (max 5000 chars)" }); return; }
+  if (!text || text.trim().length < 10) { res.status(400).json({ error: "text must be at least 10 characters" }); return; }
+  if (text.length > 5000) { res.status(400).json({ error: "text too long (max 5000 chars)" }); return; }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) { res.status(503).json({ error: "AI features not configured" }); return; }
+  const apiKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
+  if (!apiKey) {
+    res.status(401).json({ error: "GROQ_API_KEY_REQUIRED", message: "Please provide your Groq API key to use AI features." }); return;
+  }
 
-  const client = new Anthropic({ apiKey });
-  const safeText = wrapUserText(text.slice(0, 4000));
+  const client = new Groq({ apiKey });
+  const safeText = wrapUserText(text.slice(0, 5000));
+  const translateNote = targetLanguage
+    ? `Also translate the plain English version into ${targetLanguage.slice(0, 50)}.`
+    : "Do not translate.";
 
-  try {
-    const resp = await client.messages.create({
-      model: "claude-haiku-4-5",
-      max_tokens: 1500,
-      system: "You are an academic writing simplification expert. Return ONLY valid JSON.",
-      messages: [{
+  const msg = await client.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    max_tokens: 2000,
+    messages: [
+      {
+        role: "system",
+        content: "You are an expert at making complex academic text understandable. Return ONLY valid JSON.",
+      },
+      {
         role: "user",
-        content: `Simplify this academic text for a ${readingLevel} student${targetLanguage !== "English" ? `, and also provide a version in ${targetLanguage}` : ""}.
+        content: `Simplify this ${discipline} academic text into plain English that a non-specialist can understand. Keep all facts accurate. ${translateNote}
 
+Text:
 ${safeText}
 
 Return ONLY this JSON:
 {
-  "simplified": "plain English simplified version — same meaning, simpler words",
-  "keyTermsDefined": [{"term": "jargon term", "definition": "plain language definition"}],
-  "translation": ${targetLanguage !== "English" ? `"simplified version translated to ${targetLanguage}"` : `""`}
-}`,
-      }],
-    });
+  "simplified": "plain English version preserving all facts",
+  "translation": ${targetLanguage ? '"translation into ' + targetLanguage + '"' : "null"},
+  "keyTerms": [
+    { "term": "technical term", "definition": "plain English definition" }
+  ],
+  "readabilityNote": "one sentence on the main simplification made"
+}
+Include up to 8 key terms.`,
+      },
+    ],
+  });
 
-    const raw = resp.content[0]?.type === "text" ? resp.content[0].text : "{}";
-    const match = raw.match(/\{[\s\S]*\}/);
-    const data = match ? JSON.parse(match[0]) : {};
-    res.json(data);
-  } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Failed" });
-  }
+  const raw = msg.choices[0]?.message?.content ?? "{}";
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) { res.status(502).json({ error: "Could not parse AI response" }); return; }
+  res.json(JSON.parse(match[0]));
 });
 
-export { SUPPORTED_LANGUAGES };
 export default router;

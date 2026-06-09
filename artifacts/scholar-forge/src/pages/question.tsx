@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState } from "react";
 import { Search, AlertCircle, Loader2, BookOpen, ThumbsUp, ThumbsDown, Minus, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -122,7 +123,7 @@ export default function QuestionPage() {
     setError(null);
     setResult(null);
     try {
-      const res = await fetch("/api/question", {
+      const res = await apiFetch("/api/question", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: question.trim(), discipline: discipline.trim() || undefined }),

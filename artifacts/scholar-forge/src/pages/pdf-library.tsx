@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState, useRef, useCallback } from "react";
 import {
   FileArchive, Upload, Loader2, BookOpen, Search, Trash2,
@@ -74,7 +75,7 @@ function PDFChat({ entry, onClose }: { entry: PDFEntry; onClose: () => void }) {
     setMessages([...history, assistantMsg]);
 
     try {
-      const res = await fetch("/api/pdf/chat", {
+      const res = await apiFetch("/api/pdf/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

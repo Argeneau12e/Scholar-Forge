@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState } from "react";
 import { FileText, Loader2, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,7 @@ export default function AbstractGeneratorPage() {
     setLoading(true);
     setResult(null);
     try {
-      const res = await fetch("/api/abstract", {
+      const res = await apiFetch("/api/abstract", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

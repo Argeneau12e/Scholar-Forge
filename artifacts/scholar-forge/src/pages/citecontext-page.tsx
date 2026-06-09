@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState } from "react";
 import { Quote, Loader2, BookOpen, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,7 @@ export default function CiteContextPage() {
     setLoading(true);
     setResult(null);
     try {
-      const res = await fetch("/api/citecontext", {
+      const res = await apiFetch("/api/citecontext", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

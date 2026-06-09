@@ -1,0 +1,131 @@
+We're migrating ScholarForge from its current Replit setup to a fully 
+Vercel-hostable architecture, and making several other important changes. 
+Please implement ALL of the following in one structured pass:
+
+─────────────────────────────────────────
+CHANGE 1 — VERCEL DEPLOYMENT SUPPORT
+─────────────────────────────────────────
+- Add a vercel.json at the root that routes /api/* to the Express backend 
+  and everything else to the React frontend.
+- The Express backend should be adapted to work as a Vercel serverless 
+  function (wrap the Express app in a handler export compatible with 
+  Vercel's Node.js runtime). Place it at api/index.ts.
+- The frontend build output directory should be set to 
+  artifacts/scholar-forge/dist.
+- Remove any Replit-specific config from the startup logic (REPLIT_DOMAINS 
+  CORS check). Replace it with an ALLOWED_ORIGINS env variable that accepts 
+  a comma-separated list of domains, with a fallback to * in development.
+- Ensure the build command in vercel.json runs: 
+  pnpm install && pnpm run build
+- Add a .vercelignore file excluding node_modules, .env, attached_assets, 
+  and any replit-specific files (.replit, .replitignore).
+
+─────────────────────────────────────────
+CHANGE 2 — REPLACE ANTHROPIC WITH GROQ
+─────────────────────────────────────────
+- Remove all usage of the Anthropic SDK (@anthropic-ai/sdk) across the 
+  entire codebase.
+- Replace it with the Groq SDK (groq-sdk). Install it as a dependency in 
+  the api-server package.
+- The default model should be llama-3.3-70b-versatile. Where the original 
+  code used claude-haiku-4-5 or claude-sonnet-4-5, switch to this model.
+- ALL AI routes must now read the GROQ_API_KEY from the incoming request 
+  headers (header name: x-groq-api-key) rather than from server environment 
+  variables. Do NOT store the user's key server-side or in any database.
+- If the x-groq-api-key header is missing or empty on any AI route, return 
+  a 401 JSON response: { "error": "GROQ_API_KEY_REQUIRED", "message": 
+  "Please provide your Groq API key to use AI features." }
+- On the frontend, add a first-run modal/gate that:
+    • Appears on first load (check localStorage key sf_groq_key).
+    • Explains that ScholarForge uses Groq's free API for AI features.
+    • Provides a direct link to https://console.groq.com/keys so the user 
+      can get their key.
+    • Has a password-type input field for the key.
+    • Has a "Save & Continue" button — stores the key in localStorage as 
+      sf_groq_key and dismisses the modal.
+    • The app should NOT render any AI-enabled UI until the key is stored.
+    • Add a small "Change API Key" button in the settings/nav area so users 
+      can update their key at any time.
+- Every API call from the frontend that hits an AI route must include the 
+  header x-groq-api-key: <value from localStorage sf_groq_key>.
+
+─────────────────────────────────────────
+CHANGE 3 — FIX THE .env.example
+─────────────────────────────────────────
+Update .env.example to include ALL required and optional variables with 
+inline comments explaining each one:
+
+  # Required — PostgreSQL connection string
+  DATABASE_URL=postgresql://user:password@host:5432/dbname
+
+  # Required — Express session signing secret (32-byte hex string)
+  SESSION_SECRET=replace_with_a_random_32_byte_hex_string
+
+  # Required — comma-separated list of allowed frontend origins
+  ALLOWED_ORIGINS=https://your-app.vercel.app,http://localhost:5173
+
+  # Optional — increases PubMed rate limit from 3 to 10 req/s
+  NCBI_API_KEY=
+
+  # Optional — enables CORE academic database search
+  CORE_API_KEY=
+
+─────────────────────────────────────────
+CHANGE 4 — REWRITE THE README
+─────────────────────────────────────────
+Completely rewrite README.md to be comprehensive, beautifully formatted, 
+and deployment-ready. It must include:
+
+1. ASCII art logo at the top — something elegant using the letters SF or 
+   the word ScholarForge. Make it look like a real open-source project.
+
+2. Badges row — MIT License, Built with Groq, Deploy on Vercel, TypeScript, 
+   pnpm (use standard shields.io markdown badge syntax).
+
+3. A one-paragraph "What is ScholarForge?" intro — clear, confident, 
+   student-facing language.
+
+4. A full feature table (keep the existing one but clean it up and expand 
+   the descriptions).
+
+5. A "Tech Stack" section with a clean table.
+
+6. A detailed "Getting Started" section with TWO clearly separated paths:
+
+   PATH A — Local Development
+   - Prerequisites (Node 20+, pnpm, PostgreSQL)
+   - Step-by-step clone, install, env setup, DB migrate, and run commands 
+     with copy-ready code blocks
+   - How to get a Groq API key (with link)
+   - Expected output / what to look for when it starts successfully
+
+   PATH B — Deploy to Vercel (One-click + Manual)
+   - One-click deploy button ([![Deploy with Vercel](...)](vercel link))
+   - Manual steps: fork repo → import to Vercel → set env variables → deploy
+   - Table of env variables to set in Vercel dashboard
+
+7. "Project Structure" section — an ASCII tree of the monorepo layout 
+   with one-line descriptions of each folder.
+
+8. "Adding Citation Styles" and "Adding Search Backends" — keep from 
+   existing README but clean up formatting.
+
+9. "Contributing" section — keep existing rules, format nicely.
+
+10. "License" section.
+
+11. Footer line: "Built with ❤️ by a student, for every student."
+
+The tone should be warm, clear, and professional — like a well-maintained 
+open-source project README, not a school assignment. Use emoji section 
+headers sparingly but effectively.
+
+─────────────────────────────────────────
+GENERAL RULES FOR THIS TASK
+─────────────────────────────────────────
+- Do not break any existing functionality.
+- Do not remove any existing routes or features.
+- Maintain strict TypeScript — no new `any` types.
+- After all changes, run pnpm run typecheck and fix any new errors 
+  introduced by these changes before finishing.
+- Commit message when done: "feat: Vercel support, Groq API, improved docs"

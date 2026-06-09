@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState } from "react";
 import { Languages, Loader2, Copy, Check, Wand2, BookOpen, RefreshCw, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -95,7 +96,7 @@ export default function LanguagePage() {
     setLoading(true);
     setEslResult(null);
     try {
-      const res = await fetch("/api/language/check", {
+      const res = await apiFetch("/api/language/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim(), nativeLanguage: nativeLang, targetRegister: "academic" }),
@@ -112,7 +113,7 @@ export default function LanguagePage() {
     setLoading(true);
     setTranslateResult(null);
     try {
-      const res = await fetch("/api/language/translate", {
+      const res = await apiFetch("/api/language/translate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim(), targetLanguage: targetLang }),
@@ -129,7 +130,7 @@ export default function LanguagePage() {
     setLoading(true);
     setSimplifyResult(null);
     try {
-      const res = await fetch("/api/language/simplify", {
+      const res = await apiFetch("/api/language/simplify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim(), targetLanguage: simplifyLang || "English" }),

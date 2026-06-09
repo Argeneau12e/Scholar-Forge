@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import {
@@ -209,7 +210,7 @@ function CiteContextDialog({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/citecontext", {
+      const res = await apiFetch("/api/citecontext", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ doi, title }),

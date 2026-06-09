@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState, useEffect } from "react";
 import { X, BookOpen, Loader2, ChevronRight, AlertTriangle, ExternalLink, Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -61,7 +62,7 @@ export function ConceptExplainer({ term, context, discipline = "general", onClos
     setLoading(true);
     setData(null);
     try {
-      const res = await fetch("/api/concept", {
+      const res = await apiFetch("/api/concept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ term: t, context: ctx ?? context, discipline }),

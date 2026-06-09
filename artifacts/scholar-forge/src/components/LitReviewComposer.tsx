@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   DndContext,
@@ -268,7 +269,7 @@ export function LitReviewComposer() {
     initializedRef.current = false;
 
     try {
-      const resp = await fetch("/api/litreview", {
+      const resp = await apiFetch("/api/litreview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -327,7 +328,7 @@ export function LitReviewComposer() {
     if (!text.trim()) return;
     setExportLoading(true);
     try {
-      const resp = await fetch("/api/export/litreview", {
+      const resp = await apiFetch("/api/export/litreview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -33,10 +33,17 @@ app.use(
 );
 
 // ── CORS ─────────────────────────────────────────────────────────────────────
-// In production, restrict to the Replit-assigned domain.
-// In development, allow all origins (localhost + Replit preview proxy).
-const allowedOrigins: string[] = process.env.REPLIT_DOMAINS
-  ? process.env.REPLIT_DOMAINS.split(",").map((d) => `https://${d.trim()}`)
+// In production, restrict to explicitly listed domains via ALLOWED_ORIGINS
+// (comma-separated, e.g. https://myapp.vercel.app,https://myapp.com).
+// Falls back to REPLIT_DOMAINS for Replit-hosted deployments.
+// In development, allow all origins.
+const rawOrigins =
+  process.env.ALLOWED_ORIGINS ??
+  (process.env.REPLIT_DOMAINS
+    ? process.env.REPLIT_DOMAINS.split(",").map((d) => `https://${d.trim()}`).join(",")
+    : "");
+const allowedOrigins: string[] = rawOrigins
+  ? rawOrigins.split(",").map((o) => o.trim()).filter(Boolean)
   : [];
 
 app.use(
@@ -89,7 +96,7 @@ const apiLimiter = rateLimit({
   message: { error: "Too many requests. Please wait and try again." },
 });
 
-// Claude-backed routes — 60 req / hour per IP shared across all AI endpoints
+// Groq-backed routes — 60 req / hour per IP shared across all AI endpoints
 // Individual routes add stricter per-endpoint limits as a second layer.
 const claudeLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,

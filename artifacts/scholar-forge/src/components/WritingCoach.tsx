@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState, useCallback } from "react";
 import {
   PenLine,
@@ -157,7 +158,7 @@ function ParagraphReview({ discipline }: { discipline: string }) {
     setError(null);
     setResult(null);
     try {
-      const resp = await fetch("/api/coach", {
+      const resp = await apiFetch("/api/coach", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim(), mode: "full", discipline }),
@@ -302,7 +303,7 @@ function StructureCheck() {
     setError(null);
     setResult(null);
     try {
-      const resp = await fetch("/api/coach/outline", {
+      const resp = await apiFetch("/api/coach/outline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim() }),
@@ -453,7 +454,7 @@ function JargonClarity({ discipline }: { discipline: string }) {
     setError(null);
     setResult(null);
     try {
-      const resp = await fetch("/api/coach", {
+      const resp = await apiFetch("/api/coach", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: text.trim(), mode: "jargon", discipline }),

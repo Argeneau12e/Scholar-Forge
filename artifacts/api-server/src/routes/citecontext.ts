@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import { wrapUserText } from "../lib/promptSafety";
 import { safeFetch } from "../lib/safeFetch";
 
@@ -25,28 +25,26 @@ async function getOpenAlexId(doi: string): Promise<string | null> {
 }
 
 async function classifyContext(
-  client: Anthropic,
+  client: Groq,
   citedTitle: string,
   citingAbstract: string
 ): Promise<{ context: string; contextType: "supporting" | "contrasting" | "mentioning" }> {
   const safeTitle = wrapUserText(citedTitle.slice(0, 150));
   const safeAbstract = wrapUserText(citingAbstract.slice(0, 1200));
 
-  const msg = await client.messages.create({
-    model: "claude-haiku-4-5",
+  const msg = await client.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
     max_tokens: 200,
-    messages: [
-      {
-        role: "user",
-        content: `In this abstract, how is "${safeTitle}" cited? Return ONLY valid JSON:
+    messages: [{
+      role: "user",
+      content: `In this abstract, how is "${safeTitle}" cited? Return ONLY valid JSON:
 {"context":"one sentence describing how it is cited (max 20 words)","contextType":"supporting"|"contrasting"|"mentioning"}
 
 Abstract: ${safeAbstract}`,
-      },
-    ],
+    }],
   });
 
-  const text = msg.content[0]?.type === "text" ? msg.content[0].text : "{}";
+  const text = msg.choices[0]?.message?.content ?? "{}";
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) return { context: "Mentioned in passing.", contextType: "mentioning" };
   const parsed = JSON.parse(match[0]) as Partial<{ context: string; contextType: string }>;
@@ -62,25 +60,18 @@ Abstract: ${safeAbstract}`,
 router.post("/citecontext", async (req, res): Promise<void> => {
   const { doi, title } = req.body as { doi?: string; title?: string };
 
-  if (!doi) {
-    res.status(400).json({ error: "doi is required" });
-    return;
-  }
+  if (!doi) { res.status(400).json({ error: "doi is required" }); return; }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
   if (!apiKey) {
-    res.status(503).json({ error: "AI features not configured" });
-    return;
+    res.status(401).json({ error: "GROQ_API_KEY_REQUIRED", message: "Please provide your Groq API key to use AI features." }); return;
   }
 
-  // Get OpenAlex ID for the cited paper
   const oaId = await getOpenAlexId(doi).catch(() => null);
   if (!oaId) {
-    res.status(404).json({ error: "Paper not found in OpenAlex — citation context requires a DOI" });
-    return;
+    res.status(404).json({ error: "Paper not found in OpenAlex — citation context requires a DOI" }); return;
   }
 
-  // Fetch papers that cite this work
   const params = new URLSearchParams({
     filter: `cites:${oaId}`,
     "per-page": "20",
@@ -88,10 +79,7 @@ router.post("/citecontext", async (req, res): Promise<void> => {
     mailto: "scholarforge@replit.dev",
   });
   const res2 = await safeFetch(`https://api.openalex.org/works?${params}`).catch(() => null);
-  if (!res2?.ok) {
-    res.status(502).json({ error: "Could not fetch citing papers from OpenAlex" });
-    return;
-  }
+  if (!res2?.ok) { res.status(502).json({ error: "Could not fetch citing papers from OpenAlex" }); return; }
 
   const json = await res2.json() as {
     meta?: { count?: number };
@@ -119,9 +107,8 @@ router.post("/citecontext", async (req, res): Promise<void> => {
     .map((p) => ({ ...p, abstract: reconstructAbstract(p.abstract_inverted_index) }))
     .filter((p) => p.abstract.length > 80);
 
-  const client = new Anthropic({ apiKey });
+  const client = new Groq({ apiKey });
 
-  // Classify each citing paper's context in parallel
   const classified = await Promise.allSettled(
     withAbstract.map((p) =>
       classifyContext(client, title ?? "the cited paper", p.abstract).catch(() => ({
@@ -142,24 +129,12 @@ router.post("/citecontext", async (req, res): Promise<void> => {
       year: p.publication_year ?? null,
       abstract: p.abstract,
       url: p.primary_location?.landing_page_url ?? "",
-      ...cls,
+      context: cls.context,
+      contextType: cls.contextType,
     };
   });
 
-  const supporting = contexts.filter((c) => c.contextType === "supporting").length;
-  const contrasting = contexts.filter((c) => c.contextType === "contrasting").length;
-  const mentioning = contexts.filter((c) => c.contextType === "mentioning").length;
-
-  res.json({
-    doi,
-    title: title ?? null,
-    total,
-    analyzed: contexts.length,
-    supporting,
-    contrasting,
-    mentioning,
-    contexts,
-  });
+  res.json({ total, contexts, doi, title: title ?? "" });
 });
 
 export default router;

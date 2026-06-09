@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState } from "react";
 import { CalendarDays, Clock, Target, TrendingUp, AlertTriangle, CheckCircle2, Download, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -54,7 +55,7 @@ export default function SchedulePage() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/schedule", {
+      const res = await apiFetch("/api/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ deadline, currentWords, targetWords, selectedDays, hoursPerDay, bufferDays, topic }),

@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState } from "react";
 import { Link } from "wouter";
 import { useCollection } from "@/hooks/useCollection";
@@ -254,7 +255,7 @@ export function PlagiarismChecker() {
 
     try {
       setLoadingStage("Comparing against your saved sources…");
-      const resp = await fetch("/api/plagiarism", {
+      const resp = await apiFetch("/api/plagiarism", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

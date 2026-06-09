@@ -1,240 +1,131 @@
 import { Router, type IRouter } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import { wrapUserText, validateClaudeResponse } from "../lib/promptSafety";
 
 const router: IRouter = Router();
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface IncomingItem {
   title?: string;
   authors?: string[];
   year?: number | null;
-  journal?: string | null;
+  abstract?: string | null;
   originalSnippet?: string | null;
   paraphrase?: string | null;
-  abstract?: string | null;
+  tags?: string[];
 }
 
 interface GapResult {
-  title: string;
-  description: string;
-  confidence: "high" | "medium" | "speculative";
-  supportingPapers: string[];
-  thesisAngle: string;
-  type: "population" | "timeframe" | "methodology" | "contradiction" | "mechanism";
+  gaps: Array<{
+    title: string;
+    description: string;
+    suggestedRQ: string;
+    methodSuggestion: string;
+    priorityScore: number;
+  }>;
+  overarchingTheme: string;
+  dataNeeds: string[];
+  methodologicalWeaknesses: string[];
 }
 
-interface ContradictionResult {
-  paperA: string;
-  paperB: string;
-  issue: string;
+function itemSummary(item: IncomingItem): string {
+  const authors = (item.authors ?? []).slice(0, 2).map((a) => a.split(",")[0].trim()).join(" & ");
+  const year = item.year ?? "n.d.";
+  const text = item.paraphrase?.trim() || item.originalSnippet?.trim() || item.abstract?.trim() || "(no content)";
+  return `${authors || "Unknown"} et al., ${year}: ${text.slice(0, 400)}`;
 }
 
-interface GapsResponse {
-  gaps: GapResult[];
-  contradictions: ContradictionResult[];
-  strongestAngle: string;
-}
+const SYSTEM_PROMPT = `You are an expert research methodologist helping a student identify genuine gaps in the academic literature based on papers they have collected. You provide evidence-based, specific gap analysis. Return ONLY valid JSON.`;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+function buildGapPrompt(items: IncomingItem[], topic: string, discipline: string): string {
+  const summaries = items.map((item) => itemSummary(item)).join("\n\n");
+  const topicLine = topic ? `Research topic: ${topic}\n` : "";
+  return `${topicLine}Discipline: ${discipline}
 
-function itemLabel(item: IncomingItem): string {
-  const authors = (item.authors ?? []).slice(0, 2);
-  const authorStr =
-    authors.length === 0
-      ? "Unknown"
-      : authors.length === 1
-      ? authors[0].split(",")[0]
-      : `${authors[0].split(",")[0]} & ${authors[1].split(",")[0]}`;
-  return `${authorStr} et al., ${item.year ?? "n.d."}`;
-}
-
-function buildSummary(items: IncomingItem[], useParaphrases: boolean): string {
-  return items
-    .map((item) => {
-      const label = itemLabel(item);
-      const journal = item.journal ?? "Unknown Journal";
-      const text = useParaphrases
-        ? item.paraphrase?.trim() || item.originalSnippet?.trim() || item.abstract?.trim() || "(no text)"
-        : item.originalSnippet?.trim() || item.abstract?.trim() || item.paraphrase?.trim() || "(no text)";
-      return `[${label}] in [${journal}]: ${text}`;
-    })
-    .join("\n\n");
-}
-
-function tryParseGaps(raw: string): GapsResponse | null {
-  // Strip markdown code fences if present
-  const cleaned = raw
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
-
-  // Extract JSON object if surrounded by other text
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
-
-  try {
-    const parsed = JSON.parse(jsonMatch[0]) as GapsResponse;
-    if (!Array.isArray(parsed.gaps)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-const SYSTEM_PROMPT = `You are a senior academic research consultant analyzing a student's literature collection. Your job is to identify genuine gaps, contradictions, and opportunities for original contribution. You are rigorous, honest, and practical. Return ONLY valid JSON.`;
-
-function buildUserPrompt(n: number, topic: string, discipline: string, summary: string): string {
-  return `Analyze these ${n} papers on the topic of ${topic} in ${discipline}. Identify research gaps and thesis opportunities.
+Based on these ${items.length} papers in the student's collection, identify genuine research gaps.
 
 Papers:
-${summary}
+${summaries}
 
 Return ONLY this JSON:
 {
   "gaps": [
     {
-      "title": "string (8 words max)",
-      "description": "string (2-3 sentences explaining the gap)",
-      "confidence": "high" | "medium" | "speculative",
-      "supportingPapers": ["author+year of papers that reveal this gap"],
-      "thesisAngle": "string (one sentence — how a student could address this gap)",
-      "type": "population" | "timeframe" | "methodology" | "contradiction" | "mechanism"
+      "title": "gap title (5-8 words)",
+      "description": "2-3 sentence description of what is missing and why it matters",
+      "suggestedRQ": "a specific research question that addresses this gap",
+      "methodSuggestion": "brief methodology suggestion (1 sentence)",
+      "priorityScore": 8
     }
   ],
-  "contradictions": [
-    {
-      "paperA": "string",
-      "paperB": "string",
-      "issue": "string (what they disagree on)"
-    }
-  ],
-  "strongestAngle": "string (which gap is most feasible for a dissertation student and why, 2-3 sentences)"
-}`;
+  "overarchingTheme": "one sentence: the most significant overall gap in this collection",
+  "dataNeeds": ["type of data that is missing from existing studies"],
+  "methodologicalWeaknesses": ["methodological limitation common across multiple papers"]
 }
-
-function buildSimplePrompt(n: number, topic: string, discipline: string, summary: string): string {
-  return `You are a research consultant. Analyze ${n} academic papers on "${topic}" in ${discipline} and find research gaps.
-
-${summary}
-
-Return ONLY valid JSON with this exact structure (no other text):
-{"gaps":[{"title":"gap title","description":"2-3 sentences","confidence":"high","supportingPapers":["Author, Year"],"thesisAngle":"one sentence","type":"methodology"}],"contradictions":[],"strongestAngle":"2-3 sentences about the best thesis angle"}`;
+Identify 3-5 genuine, specific gaps. priorityScore 1-10.`;
 }
-
-// ─── POST /api/gaps ──────────────────────────────────────────────────────────
 
 router.post("/gaps", async (req, res): Promise<void> => {
-  const body = req.body as {
+  const { items, topic, discipline } = req.body as {
     items?: IncomingItem[];
     topic?: string;
     discipline?: string;
   };
 
-  // Validate
-  if (!Array.isArray(body.items) || body.items.length < 8) {
-    res.status(400).json({
-      error: "Collect at least 8 snippets to find research gaps.",
-    });
-    return;
+  if (!Array.isArray(items) || items.length === 0) {
+    res.status(400).json({ error: "items must be a non-empty array" }); return;
+  }
+  if (items.length > 30) {
+    res.status(400).json({ error: "Maximum 30 items allowed" }); return;
   }
 
-  const topic = typeof body.topic === "string" ? body.topic.trim() : "general research";
-  const discipline = typeof body.discipline === "string" ? body.discipline.trim() : "general";
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
   if (!apiKey) {
-    res.status(503).json({
-      error: "AI analysis is not configured. Add ANTHROPIC_API_KEY to enable this feature.",
-    });
-    return;
+    res.status(401).json({ error: "GROQ_API_KEY_REQUIRED", message: "Please provide your Groq API key to use AI features." }); return;
   }
 
-  // Build consolidated summary — use originals, fallback to paraphrases if too long
-  let summary = buildSummary(body.items, false);
-  if (summary.length > 6000) {
-    summary = buildSummary(body.items, true);
-    // If still too long, truncate each item text
-    if (summary.length > 6000) {
-      summary = buildSummary(
-        body.items.map((item) => ({
-          ...item,
-          originalSnippet: (item.originalSnippet ?? item.abstract ?? "").slice(0, 300),
-          paraphrase: (item.paraphrase ?? "").slice(0, 300),
-        })),
-        true
-      );
-    }
-  }
-
-  const client = new Anthropic({ apiKey });
-  const n = body.items.length;
-  const wrappedSummary = wrapUserText(summary);
-
-  // First attempt
-  let result: GapsResponse | null = null;
+  const safeTopic = topic ? wrapUserText(topic.slice(0, 200)) : "";
+  const safeDiscipline = (discipline ?? "general academic").slice(0, 100);
 
   try {
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 3000,
-      system: SYSTEM_PROMPT,
+    const client = new Groq({ apiKey });
+    const message = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      max_tokens: 2500,
       messages: [
-        {
-          role: "user",
-          content: buildUserPrompt(n, topic, discipline, wrappedSummary),
-        },
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: buildGapPrompt(items, safeTopic, safeDiscipline) },
       ],
     });
 
-    const raw = message.content[0]?.type === "text" ? message.content[0].text : "";
-    const gapsValidation = validateClaudeResponse(raw);
-    if (!gapsValidation.safe) {
-      req.log.warn({ ip: req.ip, route: "/api/gaps", reason: gapsValidation.reason }, "promptSafety: suspicious response blocked");
-      res.status(500).json({ error: "Response validation failed. Please try again." });
-      return;
+    const raw = message.choices[0]?.message?.content ?? "";
+    const validation = validateClaudeResponse(raw);
+    if (!validation.safe) {
+      req.log.warn({ ip: req.ip, route: "/api/gaps", reason: validation.reason }, "promptSafety: suspicious response blocked");
+      res.status(500).json({ error: "Response validation failed." }); return;
     }
-    result = tryParseGaps(raw);
-  } catch (err) {
-    // Network/API failure — will attempt retry below
-    const msg = err instanceof Error ? err.message : "API error";
-    if (msg.includes("auth") || msg.includes("key") || msg.includes("429")) {
-      res.status(503).json({ error: `AI service error: ${msg}` });
-      return;
-    }
-  }
 
-  // Retry with simpler prompt if JSON parse failed
-  if (!result) {
-    try {
-      const message2 = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 2000,
-        messages: [
-          {
-            role: "user",
-            content: buildSimplePrompt(n, topic, discipline, summary.slice(0, 4000)),
-          },
-        ],
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (!match) {
+      // Retry with simplified prompt
+      const retry = await client.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        max_tokens: 1500,
+        messages: [{
+          role: "user",
+          content: `Identify 3 research gaps from these ${items.length} papers on "${safeTopic}". Return JSON: {"gaps":[{"title":"gap","description":"description","suggestedRQ":"RQ","methodSuggestion":"method","priorityScore":7}],"overarchingTheme":"theme","dataNeeds":["need"],"methodologicalWeaknesses":["weakness"]}\n\nPapers: ${items.slice(0, 5).map(itemSummary).join(" | ")}`,
+        }],
       });
-      const raw2 = message2.content[0]?.type === "text" ? message2.content[0].text : "";
-      result = tryParseGaps(raw2);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "AI retry failed";
-      res.status(500).json({ error: `Gap analysis failed: ${msg}` });
-      return;
+      const raw2 = retry.choices[0]?.message?.content ?? "";
+      const match2 = raw2.match(/\{[\s\S]*\}/);
+      if (!match2) { res.status(502).json({ error: "Could not parse AI response" }); return; }
+      res.json(JSON.parse(match2[0])); return;
     }
-  }
 
-  if (!result) {
-    res.status(500).json({
-      error: "Could not parse AI response. Please try again.",
-    });
-    return;
+    res.json(JSON.parse(match[0]));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: `Gap analysis failed: ${msg}` });
   }
-
-  res.json(result);
 });
 
 export default router;

@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Image,
@@ -287,7 +288,7 @@ export function VisualSourcer() {
     setError(null);
     setResult(null);
     try {
-      const resp = await fetch("/api/visuals", {
+      const resp = await apiFetch("/api/visuals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: topic.trim(), discipline, figureType }),

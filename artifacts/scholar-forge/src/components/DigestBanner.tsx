@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState, useEffect } from "react";
 import { Newspaper, X, BookmarkPlus, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -56,7 +57,7 @@ export function DigestBanner({ topics = [], discipline }: DigestBannerProps) {
     if (!topics.length) return;
 
     setLoading(true);
-    fetch("/api/digest", {
+    apiFetch("/api/digest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ topics, discipline }),

@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState } from "react";
 import { Loader2, AlertCircle, Sparkles, BookOpen, ChevronDown, ChevronRight, ExternalLink, FlaskConical } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -94,7 +95,7 @@ export default function OutlinePage() {
     setLoadingAnalysis(true);
     setError(null);
     try {
-      const res = await fetch("/api/outline/analyze", {
+      const res = await apiFetch("/api/outline/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ outline, topic, discipline, wordTarget: parseInt(wordTarget) || 10000 }),
@@ -113,7 +114,7 @@ export default function OutlinePage() {
     if (!outline.trim() || !topic.trim()) return;
     setLoadingResources(true);
     try {
-      const res = await fetch("/api/outline/resources", {
+      const res = await apiFetch("/api/outline/resources", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ outline, topic, discipline }),
@@ -133,7 +134,7 @@ export default function OutlinePage() {
     if (!topic.trim()) return;
     setLoadingMethodology(true);
     try {
-      const res = await fetch("/api/methodology", {
+      const res = await apiFetch("/api/methodology", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic, researchQuestion: researchQuestion || topic, discipline }),

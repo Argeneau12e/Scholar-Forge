@@ -1,0 +1,1 @@
+- [Groq migration pattern](groq-migration.md) — all AI routes use x-groq-api-key header; key never stored server-side; searchSemantic returns SemanticResult object (.papers array), not a plain array.

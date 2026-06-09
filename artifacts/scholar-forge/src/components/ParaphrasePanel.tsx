@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState, useCallback } from "react";
 import {
   Dialog,
@@ -61,7 +62,7 @@ export function ParaphrasePanel({ paper, text, open, onOpenChange }: ParaphraseP
       setSaved(false);
 
       try {
-        const resp = await fetch("/api/paraphrase", {
+        const resp = await apiFetch("/api/paraphrase", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

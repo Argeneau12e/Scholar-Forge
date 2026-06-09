@@ -1,0 +1,15 @@
+{
+  "buildCommand": "pnpm install && pnpm --filter @workspace/scholar-forge run build",
+  "outputDirectory": "artifacts/scholar-forge/dist",
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index" },
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ],
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  }
+}

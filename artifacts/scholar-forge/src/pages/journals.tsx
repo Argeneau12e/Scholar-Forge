@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState } from "react";
 import { Loader2, AlertCircle, ExternalLink, Star, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ export default function JournalsPage() {
     setError(null);
     setResults(null);
     try {
-      const res = await fetch("/api/journals/recommend", {
+      const res = await apiFetch("/api/journals/recommend", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ abstract: abstract.trim(), topic: topic.trim() || undefined, discipline: discipline.trim() || undefined }),

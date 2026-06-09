@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import { wrapUserText } from "../lib/promptSafety";
 import { safeFetch } from "../lib/safeFetch";
 
@@ -19,11 +19,9 @@ interface JournalRecommendation {
   citationStyle: string | null;
 }
 
-async function enrichFromDOAJ(journalName: string): Promise<Partial<JournalRecommendation>> {
+async function enrichFromDOAJ(journalName: string): Promise<Partial<Pick<JournalRecommendation, "issn" | "publisher" | "openAccess" | "apcUsd" | "subjectArea" | "submissionUrl">>> {
   const q = encodeURIComponent(journalName);
-  const res = await safeFetch(
-    `https://doaj.org/api/search/journals/${q}?pageSize=1`
-  ).catch(() => null);
+  const res = await safeFetch(`https://doaj.org/api/search/journals/${q}?pageSize=1`).catch(() => null);
   if (!res?.ok) return {};
 
   const json = await res.json() as {
@@ -33,7 +31,6 @@ async function enrichFromDOAJ(journalName: string): Promise<Partial<JournalRecom
         publisher?: { name?: string };
         identifier?: Array<{ type: string; id: string }>;
         apc?: { has_apc?: boolean; max?: Array<{ price?: number; currency?: string }> };
-        editorial?: { review_process?: string[] };
         subject?: Array<{ term?: string }>;
         link?: Array<{ type?: string; url?: string }>;
       };
@@ -44,10 +41,8 @@ async function enrichFromDOAJ(journalName: string): Promise<Partial<JournalRecom
   if (!hit) return {};
 
   const issn = hit.identifier?.find((id) => id.type === "eissn" || id.type === "pissn")?.id ?? null;
-  const apcUsd =
-    hit.apc?.has_apc
-      ? (hit.apc.max?.find((m) => m.currency === "USD")?.price ?? null)
-      : 0;
+  const apcUsd = hit.apc?.has_apc
+    ? (hit.apc.max?.find((m) => m.currency === "USD")?.price ?? null) : 0;
   const subjectArea = hit.subject?.[0]?.term ?? null;
   const submissionUrl =
     hit.link?.find((l) => l.type === "aims_scope")?.url ??
@@ -72,73 +67,78 @@ router.post("/journals/recommend", async (req, res): Promise<void> => {
   };
 
   if (!abstract || abstract.trim().length < 50) {
-    res.status(400).json({ error: "abstract must be at least 50 characters" });
-    return;
+    res.status(400).json({ error: "abstract must be at least 50 characters" }); return;
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
   if (!apiKey) {
-    res.status(503).json({ error: "AI features not configured" });
-    return;
+    res.status(401).json({ error: "GROQ_API_KEY_REQUIRED", message: "Please provide your Groq API key to use AI features." }); return;
   }
 
   const safeAbstract = wrapUserText(abstract.slice(0, 2000));
-  const safeDiscipline = (discipline ?? "general academic").slice(0, 100);
+  const safeTopic = topic ? wrapUserText(topic.slice(0, 200)) : "the research topic";
+  const safeDiscipline = (discipline ?? "general").slice(0, 100);
 
-  const client = new Anthropic({ apiKey });
-  const msg = await client.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 1024,
-    messages: [
-      {
-        role: "user",
-        content: `You are an academic publishing expert. Recommend the 5 most suitable open-access journals for this ${safeDiscipline} paper.
+  const client = new Groq({ apiKey });
+  const msg = await client.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
+    max_tokens: 1500,
+    messages: [{
+      role: "user",
+      content: `You are an expert academic publishing advisor. Based on this research abstract, recommend 5 suitable journals for submission.
 
 Abstract: ${safeAbstract}
-${topic ? `Topic: ${wrapUserText(topic.slice(0, 150))}` : ""}
+Topic: ${safeTopic}
+Discipline: ${safeDiscipline}
 
-Return ONLY valid JSON array (no markdown):
-[
-  {
-    "name": "full journal name",
-    "fitScore": 85,
-    "rationale": "2 sentences explaining why this journal fits",
-    "citationStyle": "APA|Vancouver|Chicago|Harvard|IEEE|AMA",
-    "averageReviewWeeks": 12,
-    "submissionUrl": "https://... or null",
-    "issn": "xxxx-xxxx or null",
-    "publisher": "publisher name",
-    "openAccess": true,
-    "apcUsd": 1500
-  }
-]
-Recommend ONLY real open-access journals. Order by fitScore descending.`,
-      },
-    ],
+Return ONLY valid JSON (no markdown):
+{
+  "recommendations": [
+    {
+      "name": "full journal name",
+      "fitScore": 8,
+      "rationale": "2 sentences: why this journal fits this paper",
+      "openAccess": true,
+      "apcUsd": 1500,
+      "averageReviewWeeks": 12,
+      "citationStyle": "APA",
+      "submissionUrl": "https://..."
+    }
+  ],
+  "generalAdvice": "1-2 sentences of general submission advice for this paper"
+}
+fitScore 1-10. Recommend a mix of reach, target, and safe journals. Use real journal names.`,
+    }],
   });
 
-  const text = msg.content[0]?.type === "text" ? msg.content[0].text : "[]";
-  const match = text.match(/\[[\s\S]*\]/);
-  if (!match) {
-    res.status(502).json({ error: "Could not parse AI response" });
-    return;
+  const raw = msg.choices[0]?.message?.content ?? "{}";
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (!match) { res.status(502).json({ error: "Could not parse AI response" }); return; }
+
+  let parsed: { recommendations?: JournalRecommendation[]; generalAdvice?: string };
+  try {
+    parsed = JSON.parse(match[0]);
+  } catch {
+    res.status(502).json({ error: "Invalid JSON from AI" }); return;
   }
 
-  const aiJournals = JSON.parse(match[0]) as Partial<JournalRecommendation>[];
-
-  // Enrich with DOAJ data in parallel (best effort)
-  const enriched = await Promise.allSettled(
-    aiJournals.slice(0, 5).map(async (j) => {
-      const doajData = j.name ? await enrichFromDOAJ(j.name).catch(() => ({})) : {};
-      return { ...j, ...doajData } as JournalRecommendation;
+  // Enrich with DOAJ data
+  const enriched = await Promise.all(
+    (parsed.recommendations ?? []).slice(0, 5).map(async (rec) => {
+      const doajData = await enrichFromDOAJ(rec.name).catch(() => ({ issn: null, publisher: null, openAccess: false as boolean, apcUsd: null as number | null, subjectArea: null, submissionUrl: null }));
+      return {
+        ...rec,
+        issn: rec.issn ?? doajData.issn ?? null,
+        publisher: rec.publisher ?? doajData.publisher ?? null,
+        openAccess: doajData.openAccess ?? rec.openAccess ?? false,
+        apcUsd: doajData.apcUsd !== undefined ? doajData.apcUsd : rec.apcUsd ?? null,
+        subjectArea: rec.subjectArea ?? doajData.subjectArea ?? null,
+        submissionUrl: rec.submissionUrl ?? doajData.submissionUrl ?? null,
+      };
     })
   );
 
-  const recommendations = enriched
-    .filter((r) => r.status === "fulfilled")
-    .map((r) => r.value);
-
-  res.json({ recommendations });
+  res.json({ recommendations: enriched, generalAdvice: parsed.generalAdvice ?? "" });
 });
 
 export default router;

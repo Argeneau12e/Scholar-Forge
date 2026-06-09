@@ -7,12 +7,14 @@ import {
   Lightbulb, GitBranch, Quote,
   PenLine, ShieldCheck, Star, FlaskConical, LayoutTemplate, FileText,
   Moon, Sun, Github, Menu, X, UserCog, ChevronRight,
-  MessageSquare, Languages,
+  MessageSquare, Languages, Key,
 } from "lucide-react";
 import { useGetActiveSupervisor } from "@workspace/api-client-react";
 import { Badge } from "@/components/ui/badge";
 import { useCollection } from "@/hooks/useCollection";
 import { cn } from "@/lib/utils";
+import { GroqKeyGate } from "@/components/GroqKeyGate";
+import { useGroqKey } from "@/hooks/useGroqKey";
 
 function useDarkMode() {
   const [dark, setDark] = useState(() => {
@@ -106,6 +108,8 @@ export function TopNav() {
   const [dark, setDark] = useDarkMode();
   const [openSection, setOpenSection] = useState<SectionId | null>(() => sectionForPath(location));
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [keyGateOpen, setKeyGateOpen] = useState(false);
+  const { hasKey } = useGroqKey();
   const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -212,12 +216,27 @@ export function TopNav() {
           </a>
 
           <button
+            onClick={() => setKeyGateOpen(true)}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-md transition-colors",
+              hasKey
+                ? "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                : "text-amber-500 hover:text-amber-400 hover:bg-amber-500/10"
+            )}
+            title={hasKey ? "Change Groq API Key" : "Set Groq API Key (required for AI features)"}
+          >
+            <Key className="h-4 w-4" />
+          </button>
+
+          <button
             onClick={() => setDark((d) => !d)}
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
             aria-label={dark ? "Light mode" : "Dark mode"}
           >
             {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
+
+          <GroqKeyGate open={keyGateOpen} onClose={() => setKeyGateOpen(false)} mode="change" />
 
           <button
             onClick={() => setMobileOpen((v) => !v)}
@@ -319,6 +338,16 @@ export function TopNav() {
                 >
                   {dark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
                   {dark ? "Light mode" : "Dark mode"}
+                </button>
+                <button
+                  onClick={() => { setMobileOpen(false); setKeyGateOpen(true); }}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 text-[12px]",
+                    hasKey ? "text-muted-foreground" : "text-amber-500"
+                  )}
+                >
+                  <Key className="h-3.5 w-3.5" />
+                  {hasKey ? "Change API Key" : "Set API Key"}
                 </button>
               </div>
             </div>

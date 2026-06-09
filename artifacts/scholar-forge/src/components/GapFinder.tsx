@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState, useEffect, useRef } from "react";
 import { Sparkles, Save, Check, BookOpen, ChevronRight, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -178,7 +179,7 @@ export function GapFinder() {
     setResult(null);
 
     try {
-      const resp = await fetch("/api/gaps", {
+      const resp = await apiFetch("/api/gaps", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

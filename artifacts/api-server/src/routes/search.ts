@@ -3,7 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import { desc } from "drizzle-orm";
 import { eq } from "drizzle-orm";
 import { db, searchHistoryTable, supervisorsTable } from "@workspace/db";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import { SearchPapersBody } from "@workspace/api-zod";
 import { searchPubMed, type PubMedPaper } from "../lib/pubmed";
 import { searchSemantic, type SemanticPaper, type SemanticResult } from "../lib/semantic";
@@ -338,9 +338,9 @@ router.post("/search", searchLimiter, async (req, res): Promise<void> => {
   // ── Optional AI supervisor filtering ─────────────────────────────────────
   let supervisorFiltered = false;
   if (supervisor && papers.length > 0) {
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    if (anthropicKey) {
-      const client = new Anthropic({ apiKey: anthropicKey });
+    const groqKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
+    if (groqKey) {
+      const client = new Groq({ apiKey: groqKey });
       const constraints = (supervisor.constraints ?? []).join("; ");
       const focusAreas = (supervisor.focusAreas ?? []).join(", ");
       const excludeKeywords = (supervisor.excludeKeywords ?? []).join(", ");
@@ -357,8 +357,8 @@ router.post("/search", searchLimiter, async (req, res): Promise<void> => {
         .join("\n");
 
       try {
-        const message = await client.messages.create({
-          model: "claude-haiku-4-5",
+        const message = await client.chat.completions.create({
+          model: "llama-3.3-70b-versatile",
           max_tokens: 1024,
           messages: [
             {
@@ -378,10 +378,9 @@ Respond with a JSON array (score 0-1, note max 15 words, only include score >= 0
           ],
         });
 
-        const content = message.content[0];
-        if (content.type === "text") {
-          const jsonMatch = content.text.match(/\[[\s\S]*\]/);
-          if (jsonMatch) {
+        const content = message.choices[0]?.message?.content ?? "";
+        const jsonMatch = content.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
             const ratings = JSON.parse(jsonMatch[0]) as {
               index: number;
               score: number;
@@ -399,7 +398,6 @@ Respond with a JSON array (score 0-1, note max 15 words, only include score >= 0
               .sort((a, b) => (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0));
             supervisorFiltered = true;
           }
-        }
       } catch {
         // AI filtering is optional — continue without it
       }

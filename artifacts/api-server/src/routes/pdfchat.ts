@@ -1,11 +1,11 @@
 import { Router, type IRouter } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import rateLimit from "express-rate-limit";
 
 const router: IRouter = Router();
 
 const chatLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
+  windowMs: 60 * 60 * 1000,
   max: 30,
   standardHeaders: true,
   legacyHeaders: false,
@@ -61,7 +61,6 @@ function chunkText(text: string, question: string, maxChars = 14000): string {
   return assembled;
 }
 
-// POST /api/pdf/chat  (SSE streaming)
 router.post("/pdf/chat", chatLimiter, async (req, res): Promise<void> => {
   const { message, conversationHistory = [], extractedText = "" } = req.body as {
     message: string;
@@ -69,18 +68,12 @@ router.post("/pdf/chat", chatLimiter, async (req, res): Promise<void> => {
     extractedText?: string;
   };
 
-  if (!message || message.trim().length === 0) {
-    res.status(400).json({ error: "message is required" });
-    return;
-  }
-  if (message.length > 2000) {
-    res.status(400).json({ error: "Message too long (max 2000 chars)" });
-    return;
-  }
+  if (!message || message.trim().length === 0) { res.status(400).json({ error: "message is required" }); return; }
+  if (message.length > 2000) { res.status(400).json({ error: "Message too long (max 2000 chars)" }); return; }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
   if (!apiKey) {
-    res.status(503).json({ error: "AI features not configured" });
+    res.status(401).json({ error: "GROQ_API_KEY_REQUIRED", message: "Please provide your Groq API key to use AI features." });
     return;
   }
 
@@ -93,7 +86,7 @@ router.post("/pdf/chat", chatLimiter, async (req, res): Promise<void> => {
   res.setHeader("X-Accel-Buffering", "no");
   res.flushHeaders();
 
-  const client = new Anthropic({ apiKey });
+  const client = new Groq({ apiKey });
 
   try {
     const safeHistory = conversationHistory.slice(-6).map((m) => ({
@@ -101,20 +94,21 @@ router.post("/pdf/chat", chatLimiter, async (req, res): Promise<void> => {
       content: m.content.slice(0, 3000),
     }));
 
-    const stream = client.messages.stream({
-      model: "claude-haiku-4-5",
+    const stream = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
       max_tokens: 1000,
-      system: systemWithDoc,
       messages: [
+        { role: "system", content: systemWithDoc },
         ...safeHistory,
         { role: "user", content: message.trim() },
       ],
+      stream: true,
     });
 
-    for await (const event of stream) {
-      if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-        const data = JSON.stringify({ text: event.delta.text });
-        res.write(`data: ${data}\n\n`);
+    for await (const chunk of stream) {
+      const text = chunk.choices[0]?.delta?.content ?? "";
+      if (text) {
+        res.write(`data: ${JSON.stringify({ text })}\n\n`);
       }
     }
 

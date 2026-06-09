@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState } from "react";
 import { LayoutTemplate, Loader2, Download, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,7 +45,7 @@ export default function PosterBuilderPage() {
     setLoading(true);
     try {
       const collectionSummary = items.slice(0, 10).map((i) => `${i.title} (${i.year ?? "n.d."})`).join("; ");
-      const res = await fetch("/api/poster/content", {
+      const res = await apiFetch("/api/poster/content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

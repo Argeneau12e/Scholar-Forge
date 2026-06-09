@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as d3 from "d3";
 import { Network, Download, AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
@@ -403,7 +404,7 @@ export function ArgumentMapper() {
     setSelectedNodeId(null);
     setSelectedEdges([]);
     try {
-      const resp = await fetch("/api/argmap", {
+      const resp = await apiFetch("/api/argmap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

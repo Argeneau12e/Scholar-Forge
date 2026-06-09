@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState, useEffect } from "react";
 import {
   Dialog,
@@ -188,7 +189,7 @@ export function OriginalityPanel({
     setError(null);
     setResult(null);
     try {
-      const resp = await fetch("/api/similarity", {
+      const resp = await apiFetch("/api/similarity", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ original, paraphrase }),

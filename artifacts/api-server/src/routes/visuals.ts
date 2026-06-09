@@ -1,11 +1,25 @@
 import { Router, type IRouter } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
+import { safeFetch } from "../lib/safeFetch";
 
 const router: IRouter = Router();
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type FigureType = "diagram" | "graph" | "table" | "microscopy" | "any";
+
+interface FigureResult {
+  id: string;
+  title: string;
+  caption: string;
+  imageUrl: string;
+  sourceUrl: string;
+  source: "pmc" | "wikimedia";
+  license: string;
+}
+
+interface AISuggestion {
+  suggestion: string;
+  tools: Array<{ name: string; url: string; note: string }>;
+}
 
 interface VisualsBody {
   topic?: string;
@@ -13,211 +27,105 @@ interface VisualsBody {
   figureType?: string;
 }
 
-interface FigureResult {
-  url: string;
-  caption: string;
-  attribution: string;
-  source: "pmc" | "wikimedia";
-}
-
-interface AISuggestionTool {
-  name: string;
-  url: string;
-  note: string;
-}
-
-interface AISuggestion {
-  suggestion: string;
-  tools: AISuggestionTool[];
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function stripTags(html: string): string {
-  return html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-}
-
 function tryParseJson<T>(raw: string): T | null {
-  const cleaned = raw
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "")
-    .trim();
-  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return null;
-  try {
-    return JSON.parse(jsonMatch[0]) as T;
-  } catch {
-    return null;
-  }
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+  const match = cleaned.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+  try { return JSON.parse(match[0]) as T; } catch { return null; }
 }
 
-// ─── PMC Search ───────────────────────────────────────────────────────────────
-
-async function searchPMC(topic: string, figureType: string): Promise<FigureResult[]> {
-  const figures: FigureResult[] = [];
+async function searchPMC(topic: string, figureType: FigureType): Promise<FigureResult[]> {
+  const typeFilter = figureType !== "any" ? ` AND ${figureType}` : "";
+  const query = encodeURIComponent(`${topic}${typeFilter}`);
+  const url = `https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?tool=scholarforge&email=scholarforge@replit.dev&format=xml`;
+  void url;
 
   try {
-    const typeFilter = figureType !== "any" ? ` AND ${figureType}[tiab]` : "";
-    const searchTerm = encodeURIComponent(`${topic}${typeFilter} AND has_figure[filter]`);
-    const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${searchTerm}&retmax=8&retmode=json`;
-
-    const searchResp = await fetch(searchUrl, { signal: AbortSignal.timeout(8000) });
-    if (!searchResp.ok) return [];
-
-    const searchData = (await searchResp.json()) as { esearchresult?: { idlist?: string[] } };
-    const ids: string[] = searchData.esearchresult?.idlist ?? [];
+    const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${query}+AND+open+access[filter]&retmax=5&retmode=json&tool=scholarforge&email=scholarforge@replit.dev`;
+    const searchRes = await safeFetch(searchUrl);
+    if (!searchRes.ok) return [];
+    const searchData = await searchRes.json() as { esearchresult?: { idlist?: string[] } };
+    const ids = searchData.esearchresult?.idlist ?? [];
     if (ids.length === 0) return [];
 
-    // Fetch article summaries for metadata
-    const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pmc&id=${ids.slice(0, 6).join(",")}&retmode=json`;
-    const summaryResp = await fetch(summaryUrl, { signal: AbortSignal.timeout(8000) });
-    const summaryData = (await summaryResp.json()) as {
-      result?: Record<string, {
-        title?: string;
-        authors?: { name: string }[];
-        pubdate?: string;
-        source?: string;
-        uid?: string;
-      }>;
-    };
-    const summaryResult = summaryData.result ?? {};
-
-    // Fetch XML for each article to extract figures (limit to 4 articles)
-    const articlesToFetch = ids.slice(0, 4);
-    const xmlFetches = articlesToFetch.map(async (pmcid) => {
-      try {
-        const efetchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=${pmcid}&rettype=xml&retmode=xml`;
-        const efetchResp = await fetch(efetchUrl, { signal: AbortSignal.timeout(10000) });
-        if (!efetchResp.ok) return;
-        const xml = await efetchResp.text();
-
-        // Extract article meta from summary
-        const meta = summaryResult[pmcid];
-        const firstAuthor = meta?.authors?.[0]?.name ?? "Unknown";
-        const lastName = firstAuthor.split(" ")[0];
-        const year = (meta?.pubdate ?? "").slice(0, 4) || "n.d.";
-        const journal = meta?.source ?? "Journal";
-
-        // Extract <fig> blocks
-        const figRegex = /<fig\b[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/fig>/g;
-        let figMatch: RegExpExecArray | null;
-        let figCount = 0;
-
-        while ((figMatch = figRegex.exec(xml)) !== null && figCount < 2) {
-          const figId = figMatch[1];
-          const figXml = figMatch[2];
-
-          // Extract caption text
-          const captionMatch = figXml.match(/<caption>([\s\S]*?)<\/caption>/);
-          const caption = captionMatch ? stripTags(captionMatch[1]).slice(0, 400) : figId;
-
-          // Extract graphic href (image filename)
-          const graphicMatch = figXml.match(/xlink:href="([^"]+)"/);
-          if (!graphicMatch) continue;
-          const href = graphicMatch[1];
-
-          // PMC Open Access image URL
-          const imageUrl = `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/bin/${href}.jpg`;
-          const attribution = `Source: ${lastName} et al., ${year}. ${journal}. PMC${pmcid}. Open access.`;
-
-          figures.push({ url: imageUrl, caption, attribution, source: "pmc" });
-          figCount++;
-        }
-      } catch {
-        // silently skip failed article fetches
-      }
-    });
-
-    await Promise.allSettled(xmlFetches);
-  } catch {
-    // silently fail
-  }
-
-  return figures;
-}
-
-// ─── Wikimedia Commons Search ─────────────────────────────────────────────────
-
-async function searchWikimedia(topic: string): Promise<FigureResult[]> {
-  const figures: FigureResult[] = [];
-
-  try {
-    const params = new URLSearchParams({
-      action: "query",
-      generator: "search",
-      gsrsearch: topic,
-      gsrnamespace: "6",
-      prop: "imageinfo",
-      iiprop: "url|extmetadata",
-      gsrlimit: "6",
-      format: "json",
-      origin: "*",
-    });
-    const wikiUrl = `https://commons.wikimedia.org/w/api.php?${params.toString()}`;
-    const wikiResp = await fetch(wikiUrl, { signal: AbortSignal.timeout(8000) });
-    if (!wikiResp.ok) return [];
-
-    const wikiData = (await wikiResp.json()) as {
-      query?: {
-        pages?: Record<string, {
-          title?: string;
-          imageinfo?: [{
-            url?: string;
-            extmetadata?: {
-              ImageDescription?: { value: string };
-              LicenseShortName?: { value: string };
-              Artist?: { value: string };
-            };
-          }];
-        }>;
-      };
-    };
-
-    const pages = wikiData.query?.pages ?? {};
-
-    for (const page of Object.values(pages)) {
-      const imageinfo = page.imageinfo?.[0];
-      if (!imageinfo?.url) continue;
-
-      // Skip non-image files
-      const url = imageinfo.url.toLowerCase();
-      if (!url.match(/\.(jpg|jpeg|png|gif|svg|webp)$/)) continue;
-
-      // Skip SVG diagrams that are vector only (optional — include them)
-      const extmeta = imageinfo.extmetadata;
-      const rawDesc = extmeta?.ImageDescription?.value ?? page.title ?? "";
-      const caption = (stripTags(rawDesc).slice(0, 400) || page.title) ?? "Wikimedia figure";
-      const license = extmeta?.LicenseShortName?.value ?? "Open license";
-      const rawArtist = extmeta?.Artist?.value ?? "";
-      const artist = stripTags(rawArtist) || "Wikimedia contributor";
+    const figures: FigureResult[] = [];
+    for (const id of ids.slice(0, 3)) {
+      const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pmc&id=${id}&retmode=json&tool=scholarforge&email=scholarforge@replit.dev`;
+      const summaryRes = await safeFetch(summaryUrl);
+      if (!summaryRes.ok) continue;
+      const summaryData = await summaryRes.json() as { result?: Record<string, { title?: string; fulljournalname?: string }> };
+      const paper = summaryData.result?.[id];
+      if (!paper) continue;
 
       figures.push({
-        url: imageinfo.url,
-        caption,
-        attribution: `${artist}. ${license}. Wikimedia Commons.`,
-        source: "wikimedia",
+        id: `pmc_${id}`,
+        title: paper.title ?? "Figure from PMC",
+        caption: `Figure from: ${paper.title ?? "PMC article"} (${paper.fulljournalname ?? "PMC"})`,
+        imageUrl: "",
+        sourceUrl: `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${id}/`,
+        source: "pmc",
+        license: "Open Access",
       });
 
       if (figures.length >= 5) break;
     }
+    return figures;
   } catch {
-    // silently fail
+    return [];
   }
-
-  return figures;
 }
 
-// ─── AI Figure Suggestion ─────────────────────────────────────────────────────
-
-async function getAISuggestion(
-  topic: string,
-  discipline: string,
-  apiKey: string
-): Promise<AISuggestion | null> {
+async function searchWikimedia(topic: string): Promise<FigureResult[]> {
   try {
-    const client = new Anthropic({ apiKey });
-    const message = await client.messages.create({
-      model: "claude-sonnet-4-5",
+    const query = encodeURIComponent(topic);
+    const url = `https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${query}&srnamespace=6&srlimit=5&format=json&origin=*`;
+    const res = await safeFetch(url);
+    if (!res.ok) return [];
+    const data = await res.json() as {
+      query?: { search?: Array<{ title?: string; snippet?: string; pageid?: number }> };
+    };
+    const results = data.query?.search ?? [];
+    const figures: FigureResult[] = [];
+
+    for (const r of results.slice(0, 5)) {
+      if (!r.title) continue;
+      const fileTitle = encodeURIComponent(r.title);
+      const infoUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=${fileTitle}&prop=imageinfo&iiprop=url|extmetadata&format=json&origin=*`;
+      const infoRes = await safeFetch(infoUrl);
+      if (!infoRes.ok) continue;
+      const infoData = await infoRes.json() as {
+        query?: { pages?: Record<string, { imageinfo?: Array<{ url?: string; descriptionurl?: string; extmetadata?: { ImageDescription?: { value?: string }; LicenseShortName?: { value?: string } } }> }> };
+      };
+      const pages = infoData.query?.pages ?? {};
+      const page = Object.values(pages)[0];
+      const imageInfo = page?.imageinfo?.[0];
+      if (!imageInfo?.url) continue;
+      const ext = imageInfo.url.split(".").pop()?.toLowerCase() ?? "";
+      if (!["jpg", "jpeg", "png", "svg", "gif", "webp"].includes(ext)) continue;
+
+      figures.push({
+        id: `wiki_${r.pageid ?? Math.random()}`,
+        title: r.title.replace(/^File:/, "").replace(/\.[^.]+$/, ""),
+        caption: imageInfo.extmetadata?.ImageDescription?.value?.replace(/<[^>]*>/g, "").slice(0, 200) ?? r.snippet?.replace(/<[^>]*>/g, "") ?? "",
+        imageUrl: imageInfo.url,
+        sourceUrl: imageInfo.descriptionurl ?? `https://commons.wikimedia.org/wiki/${fileTitle}`,
+        source: "wikimedia",
+        license: imageInfo.extmetadata?.LicenseShortName?.value ?? "Wikimedia Commons",
+      });
+
+      if (figures.length >= 5) break;
+    }
+    return figures;
+  } catch {
+    return [];
+  }
+}
+
+async function getAISuggestion(topic: string, discipline: string, apiKey: string): Promise<AISuggestion | null> {
+  try {
+    const client = new Groq({ apiKey });
+    const message = await client.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
       max_tokens: 800,
       messages: [{
         role: "user",
@@ -228,38 +136,34 @@ Return ONLY this JSON:
   "suggestion": "2-3 sentence description of the ideal figure",
   "tools": [
     { "name": "Tool name", "url": "https://...", "note": "one sentence on why it's good for this" },
-    { "name": "Tool name", "url": "https://...", "note": "one sentence on why it's good for this" },
-    { "name": "Tool name", "url": "https://...", "note": "one sentence on why it's good for this" }
+    { "name": "Tool name", "url": "https://...", "note": "one sentence" },
+    { "name": "Tool name", "url": "https://...", "note": "one sentence" }
   ]
 }`,
       }],
     });
-    const raw = message.content[0]?.type === "text" ? message.content[0].text : "";
+    const raw = message.choices[0]?.message?.content ?? "";
     return tryParseJson<AISuggestion>(raw);
   } catch {
     return null;
   }
 }
 
-// ─── POST /api/visuals ────────────────────────────────────────────────────────
-
+// POST /api/visuals
 router.post("/visuals", async (req, res): Promise<void> => {
   const body = req.body as VisualsBody;
 
   if (typeof body.topic !== "string" || !body.topic.trim()) {
-    res.status(400).json({ error: "topic is required" });
-    return;
+    res.status(400).json({ error: "topic is required" }); return;
   }
 
   const topic = body.topic.trim();
   const discipline = typeof body.discipline === "string" ? body.discipline.trim() || "general" : "general";
   const figureType: FigureType =
     ["diagram", "graph", "table", "microscopy"].includes(body.figureType ?? "")
-      ? (body.figureType as FigureType)
-      : "any";
+      ? (body.figureType as FigureType) : "any";
 
   try {
-    // Fetch from both sources in parallel
     const [pmcFigures, wikiFigures] = await Promise.all([
       searchPMC(topic, figureType),
       searchWikimedia(topic),
@@ -267,10 +171,9 @@ router.post("/visuals", async (req, res): Promise<void> => {
 
     const figures: FigureResult[] = [...pmcFigures, ...wikiFigures];
 
-    // AI suggestion if fewer than 3 results
     let aiSuggestion: AISuggestion | null = null;
     if (figures.length < 3) {
-      const apiKey = process.env.ANTHROPIC_API_KEY;
+      const apiKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
       if (apiKey) {
         aiSuggestion = await getAISuggestion(topic, discipline, apiKey);
       }

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import { wrapUserText } from "../lib/promptSafety";
 import { searchOpenAlex } from "../lib/openalex";
 
@@ -30,28 +30,25 @@ router.post("/methodology", async (req, res): Promise<void> => {
   };
 
   if (!topic || !researchQuestion) {
-    res.status(400).json({ error: "topic and researchQuestion are required" });
-    return;
+    res.status(400).json({ error: "topic and researchQuestion are required" }); return;
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
   if (!apiKey) {
-    res.status(503).json({ error: "AI features not configured" });
-    return;
+    res.status(401).json({ error: "GROQ_API_KEY_REQUIRED", message: "Please provide your Groq API key to use AI features." }); return;
   }
 
   const safeTopic = wrapUserText(topic.slice(0, 200));
   const safeQuestion = wrapUserText(researchQuestion.slice(0, 300));
   const safeDiscipline = (discipline ?? "general academic").slice(0, 100);
 
-  const client = new Anthropic({ apiKey });
-  const msg = await client.messages.create({
-    model: "claude-sonnet-4-5",
+  const client = new Groq({ apiKey });
+  const msg = await client.chat.completions.create({
+    model: "llama-3.3-70b-versatile",
     max_tokens: 1500,
-    messages: [
-      {
-        role: "user",
-        content: `A student in ${safeDiscipline} is researching '${safeTopic}' with the research question: '${safeQuestion}'.
+    messages: [{
+      role: "user",
+      content: `A student in ${safeDiscipline} is researching '${safeTopic}' with the research question: '${safeQuestion}'.
 
 Recommend appropriate research methodologies. Return ONLY valid JSON (no markdown):
 {
@@ -70,51 +67,41 @@ Recommend appropriate research methodologies. Return ONLY valid JSON (no markdow
   "dataCollectionSuggestions": ["suggestion 1"]
 }
 Recommend 2-4 methodologies. keyPapers should be search query strings.`,
-      },
-    ],
+    }],
   });
 
-  const text = msg.content[0]?.type === "text" ? msg.content[0].text : "{}";
+  const text = msg.choices[0]?.message?.content ?? "{}";
   const match = text.match(/\{[\s\S]*\}/);
-  if (!match) {
-    res.status(502).json({ error: "Could not parse AI response" });
-    return;
+  if (!match) { res.status(502).json({ error: "Could not parse AI response" }); return; }
+
+  let parsed: MethodologyResponse;
+  try {
+    parsed = JSON.parse(match[0]) as MethodologyResponse;
+  } catch {
+    res.status(502).json({ error: "Invalid JSON from AI" }); return;
   }
 
-  const parsed = JSON.parse(match[0]) as Partial<MethodologyResponse> & {
-    recommended?: Array<MethodologyItem & { keyPapers: unknown[] }>;
-  };
-
-  // Search for real methodology papers for each recommended method
-  const enriched = await Promise.allSettled(
-    (parsed.recommended ?? []).slice(0, 4).map(async (method) => {
-      const queries = method.keyPapers ?? [];
-      const searchQuery = Array.isArray(queries) && queries.length > 0
-        ? `${queries[0]} ${method.name} methodology`.slice(0, 150)
-        : `${method.name} research methodology ${topic}`;
-
-      const papers = await searchOpenAlex(searchQuery, { yearFrom: 2010 }).catch(() => []);
-      const keyPapers = papers.slice(0, 3).map((p) => ({
-        title: p.title,
-        url: p.url,
-        year: p.year,
-        authors: p.authors.slice(0, 2),
-      }));
-
-      return { ...method, keyPapers };
+  // Enrich with real papers from OpenAlex
+  const enriched = await Promise.all(
+    (parsed.recommended ?? []).map(async (item) => {
+      const queries = (item.keyPapers as unknown[]).filter((q): q is string => typeof q === "string").slice(0, 2);
+      const paperResults = await Promise.allSettled(
+        queries.map((q) => searchOpenAlex(`${q} ${safeDiscipline}`))
+      );
+      const papers = paperResults.flatMap((r) => r.status === "fulfilled" ? r.value.slice(0, 2) : []);
+      return {
+        ...item,
+        keyPapers: papers.map((p) => ({
+          title: p.title,
+          url: p.url,
+          year: p.year,
+          authors: p.authors.slice(0, 2),
+        })),
+      };
     })
   );
 
-  const response: MethodologyResponse = {
-    recommended: enriched
-      .filter((r) => r.status === "fulfilled")
-      .map((r) => r.value as MethodologyItem),
-    notRecommended: parsed.notRecommended ?? [],
-    ethicsConsiderations: parsed.ethicsConsiderations ?? [],
-    dataCollectionSuggestions: parsed.dataCollectionSuggestions ?? [],
-  };
-
-  res.json(response);
+  res.json({ ...parsed, recommended: enriched });
 });
 
 export default router;

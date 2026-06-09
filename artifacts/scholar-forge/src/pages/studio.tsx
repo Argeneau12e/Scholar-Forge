@@ -1,3 +1,4 @@
+import { apiFetch } from "@/lib/apiFetch";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -354,7 +355,7 @@ export default function WritingStudioPage() {
     if (q.length < 3) return;
     setPickerLoading(true);
     try {
-      const res = await fetch("/api/search", {
+      const res = await apiFetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: q, topic: q, maxResults: 5, sources: ["openalex"] }),
@@ -403,7 +404,7 @@ export default function WritingStudioPage() {
     };
 
     try {
-      const res = await fetch("/api/coach", {
+      const res = await apiFetch("/api/coach", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: ACTION_PROMPTS[action], mode: "clarity", discipline: "academic" }),

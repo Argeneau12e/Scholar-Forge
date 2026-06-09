@@ -1,135 +1,148 @@
-# ScholarForge — Free Academic Research Assistant
+# ScholarForge
 
-> AI-powered research toolbox built by a student, for every student. Free and open source.
+A full-stack AI-powered academic research assistant for students and researchers. Combines multi-source paper search with AI-driven tools for writing, analysis, and literature review.
 
----
+## Features
 
-## What it does
+- **Paper Search** — 9 academic databases (OpenAlex, Semantic Scholar, PubMed, arXiv, CORE, Europe PMC, DOAJ, BASE, Unpaywall)
+- **Writing Studio** — Tiptap v3 rich editor with AI rewrite, summarise, and continue actions
+- **Lit Review Composer** — Structured or thematic literature review generator
+- **Gap Finder** — Identifies research gaps in your paper collection
+- **Argument Mapper** — D3 visualisation of paper relationships
+- **Citation Context** — Shows how a paper is cited across the literature
+- **Writing Coach** — Paragraph-level feedback on clarity, structure, and academic register
+- **Originality Checker** — Phrase-level similarity detection against your sources
+- **Paraphrase Tool** — Three intensity levels with inline citation
+- **PDF Library** — Upload PDFs, extract text, chat with papers via SSE streaming
+- **Reading List** — Kanban board with analytics dashboard
+- **Outline Editor** — AI structure feedback + per-section resource recommendations
+- **Writing Schedule** — AI-enhanced deadline-aware schedule generator
+- **Language Support** — ESL writing check, academic translation, plain-language simplification
+- **Poster Builder** — Generate + export academic conference posters as PNG
+- **Abstract Generator** — Structured or unstructured abstracts up to 600 words
+- **Peer Feedback** — Threaded comment sessions with export/import
+- **Journal Finder** — DOAJ-enriched journal recommendations
+- **Methodology Advisor** — Research methodology recommendations with real papers
+- **Question Answering** — Stance classification (supports/contradicts/neutral) per paper
 
-ScholarForge gives you a complete dissertation research workflow in one place:
-
-| Feature | What it does |
-|---|---|
-| **Paper Search** | Searches PubMed Central + Semantic Scholar simultaneously, filtered by your supervisor's year range and citation style |
-| **Snippet Collection** | Save paper excerpts with one click; paste raw snippets manually; import by DOI |
-| **AI Paraphraser** | Rewrites snippets in your voice with the correct inline citation already attached |
-| **Originality Check** | Side-by-side diff of your draft vs the source — highlights what changed |
-| **Citation Formatter** | Generates APA 7th, Vancouver, Harvard, MLA, Chicago citations from a DOI |
-| **Research Gap Finder** | Claude reads your collection and identifies 5 unexplored research angles; saves the strongest as your thesis statement |
-| **Literature Review Composer** | AI drafts a structured lit review from your saved papers; contenteditable with Bold/Italic/Undo; exports to .docx |
-| **Argument Mapper** | D3 force-directed graph showing how papers support, contradict, extend, and replicate each other |
-| **Writing Coach** | Paragraph-level feedback: scores (clarity, structure, academic register, citations), issue cards with fixes, plain-English rewrites, structure check, jargon simplifier |
-| **Visual Sourcer** | Finds open-access figures from PubMed Central and Wikimedia Commons; AI suggests ideal diagram when none found |
-| **Bibliography Export** | Exports your full collection as .docx, .bib, or .txt |
-
----
-
-## Quick start
-
-```bash
-# Clone
-git clone https://github.com/your-username/scholarforge.git
-cd scholarforge
-
-# Install dependencies (pnpm workspace)
-pnpm install
-
-# Set environment variables
-cp .env.example .env
-# Add: ANTHROPIC_API_KEY=sk-ant-...
-# Add: DATABASE_URL=postgresql://...
-
-# Run database migrations
-pnpm --filter @workspace/api-server run db:migrate
-
-# Start development servers (both run concurrently)
-pnpm --filter @workspace/api-server run dev
-pnpm --filter @workspace/scholar-forge run dev
-```
-
-Then open `http://localhost:5173` (or the port shown in the terminal).
-
----
-
-## Tech stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui |
-| Backend | Node.js, Express, TypeScript, esbuild |
-| Database | PostgreSQL (Drizzle ORM) |
-| AI | Anthropic Claude (claude-sonnet-4-5) |
-| Search | PubMed E-utilities API, Semantic Scholar API |
-| Figures | PubMed Central OA, Wikimedia Commons API |
-| Graphs | D3.js (force-directed, zoom/pan) |
-| Export | docx (Word), BibTeX, plain text |
+| Frontend | React 18 + Vite + TypeScript |
+| UI | Tailwind CSS + shadcn/ui |
+| Routing | Wouter |
+| State | TanStack Query |
+| Editor | Tiptap v3 |
+| Graph | D3 v7 |
+| PDF | pdfjs-dist |
+| Backend | Express 5 + TypeScript |
+| Database | PostgreSQL + Drizzle ORM |
+| AI | Groq API (`llama-3.3-70b-versatile`) — supplied per request via header |
+| Validation | Zod v4 + drizzle-zod |
+| API codegen | Orval (OpenAPI → React Query hooks) |
 | Monorepo | pnpm workspaces |
 
----
+## Getting Started
 
-## Adding citation styles
+### Prerequisites
 
-Citation styles are defined in `artifacts/api-server/src/routes/cite.ts`.
+- Node.js 24+
+- pnpm 9+
+- PostgreSQL database
 
-1. Add the new style to the `STYLE_MAP` object
-2. Write the formatter function following the existing APA/Vancouver patterns
-3. Add it to `CITATION_STYLES` in `artifacts/scholar-forge/src/hooks/useSupervisor.ts`
-4. Restart the API server
+### Setup
 
----
+```bash
+# Install dependencies
+pnpm install
 
-## Adding search backends
+# Configure environment
+cp .env.example .env
+# Fill in DATABASE_URL and SESSION_SECRET
 
-Search backends live in `artifacts/api-server/src/routes/search.ts`.
+# Push database schema
+pnpm --filter @workspace/db run push
 
-Each backend is a function with the signature:
-```typescript
-async function searchBackend(params: SearchParams): Promise<Paper[]>
+# Start development servers
+pnpm --filter @workspace/api-server run dev   # API on :8080
+pnpm --filter @workspace/scholar-forge run dev # Frontend on :5173
 ```
 
-Add your function and include it in the `Promise.allSettled([...])` call in the route handler.
+### Groq API Key
 
----
+ScholarForge uses [Groq](https://console.groq.com/keys) (free tier available) to power all AI features. The key is **never stored on the server** — it is entered once in the browser UI, stored in `localStorage`, and sent as an `x-groq-api-key` request header with every AI request.
 
-## University deployment guide
+On first load, the app prompts you to enter your key. You can change it any time via the **key icon** in the top navigation bar.
 
-ScholarForge is designed to run behind any reverse proxy. For a university deployment:
+## Environment Variables
 
-1. **Set `ANTHROPIC_API_KEY`** — required for all AI features
-2. **Set `DATABASE_URL`** — PostgreSQL 14+ recommended
-3. **Set `SESSION_SECRET`** — a random 32-byte hex string
-4. **Configure `ALLOWED_ORIGINS`** — your university domain
-5. **Run behind nginx/Caddy** — the app binds to `PORT` (default 8080 for API, 3000 for frontend)
-6. Consider rate-limiting the `/api/paraphrase`, `/api/gaps`, `/api/litreview`, `/api/argmap`, `/api/coach` routes per user session to manage AI costs
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `SESSION_SECRET` | Yes | Express session signing secret |
+| `NCBI_API_KEY` | Optional | PubMed 10 req/s (3 req/s without) |
+| `CORE_API_KEY` | Optional | CORE academic search |
+| `ALLOWED_ORIGINS` | Production | Comma-separated CORS origins (e.g. `https://myapp.vercel.app`) |
 
-### Docker (example)
+## Deployment
 
-```dockerfile
-FROM node:20-alpine
-WORKDIR /app
-COPY . .
-RUN npm install -g pnpm && pnpm install
-RUN pnpm --filter @workspace/api-server run build
-EXPOSE 8080
-CMD ["node", "artifacts/api-server/dist/index.mjs"]
+### Vercel
+
+```bash
+npm i -g vercel
+vercel
 ```
 
----
+The included `vercel.json` configures:
+- **Build**: `pnpm install && pnpm --filter @workspace/scholar-forge run build`
+- **Output**: `artifacts/scholar-forge/dist`
+- **API**: all `/api/*` requests → `api/index.ts` (Express serverless wrapper)
+- **SPA routing**: all non-API paths serve `index.html`
 
-## Contributing
+Set `ALLOWED_ORIGINS=https://your-app.vercel.app` in Vercel environment variables.
 
-1. Fork the repo and create a feature branch
-2. Follow the existing TypeScript patterns — no `any`, explicit return types on route handlers
-3. All API routes must handle missing `ANTHROPIC_API_KEY` with a 503 and informative message
-4. Add routes to `artifacts/api-server/src/routes/index.ts`
-5. Open a pull request — keep it focused (one feature per PR)
+### Replit
 
----
+Runs natively. CORS is automatically restricted to your Replit domain via the `REPLIT_DOMAINS` environment variable (set automatically by the platform).
+
+## Project Structure
+
+```
+artifacts/
+  api-server/          # Express 5 API
+    src/
+      routes/          # 22 route modules (one per feature)
+      lib/             # Search adapters, safety utils
+      middlewares/
+  scholar-forge/       # React + Vite frontend
+    src/
+      pages/           # 21 page components
+      components/      # Feature components
+      hooks/
+      lib/
+lib/
+  db/                  # Drizzle ORM schema + migrations
+  api-spec/            # OpenAPI spec + Orval codegen
+  api-client-react/    # Generated React Query hooks
+  api-zod/             # Generated Zod schemas
+api/
+  index.ts             # Vercel serverless handler
+```
+
+## Security
+
+- CORS restricted to listed origins in production
+- Helmet CSP, no inline scripts
+- Body size limit: 1 MB
+- Global rate limit: 60 AI req/hour per IP
+- Per-route limits on high-volume endpoints
+- Max 3 concurrent AI requests per IP
+- Outbound fetches restricted to approved academic API allowlist (`safeFetch.ts`)
+- Prompt injection protection via `wrapUserText()` delimiters
+- Input sanitization middleware
+- Abstract content sanitized with `sanitize-html`
 
 ## License
 
-MIT — free to use, modify, and deploy. A link back to this repo is appreciated but not required.
-
----
-
-*ScholarForge is not affiliated with any university, publisher, or research institution.*
+MIT

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import Anthropic from "@anthropic-ai/sdk";
+import Groq from "groq-sdk";
 import { wrapUserText } from "../lib/promptSafety";
 import { safeFetch } from "../lib/safeFetch";
 
@@ -21,21 +21,17 @@ router.post("/digest", async (req, res): Promise<void> => {
   };
 
   if (!topics || !Array.isArray(topics) || topics.length === 0) {
-    res.status(400).json({ error: "topics array is required" });
-    return;
+    res.status(400).json({ error: "topics array is required" }); return;
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = (req.headers["x-groq-api-key"] as string | undefined)?.trim();
   if (!apiKey) {
-    res.status(503).json({ error: "AI features not configured" });
-    return;
+    res.status(401).json({ error: "GROQ_API_KEY_REQUIRED", message: "Please provide your Groq API key to use AI features." }); return;
   }
 
-  // Build date filter: last 7 days
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const dateStr = sevenDaysAgo.toISOString().split("T")[0];
-
   const query = topics.slice(0, 3).join(" OR ").slice(0, 200);
 
   const params = new URLSearchParams({
@@ -49,8 +45,7 @@ router.post("/digest", async (req, res): Promise<void> => {
 
   const oaRes = await safeFetch(`https://api.openalex.org/works?${params}`).catch(() => null);
   if (!oaRes?.ok) {
-    res.status(502).json({ error: "Could not fetch recent papers from OpenAlex" });
-    return;
+    res.status(502).json({ error: "Could not fetch recent papers from OpenAlex" }); return;
   }
 
   const json = await oaRes.json() as {
@@ -82,28 +77,22 @@ router.post("/digest", async (req, res): Promise<void> => {
     .slice(0, 5);
 
   if (!papers.length) {
-    res.json({ papers: [], generatedAt: new Date().toISOString(), query });
-    return;
+    res.json({ papers: [], generatedAt: new Date().toISOString(), query }); return;
   }
 
-  // Claude 2-sentence summaries for each paper
-  const client = new Anthropic({ apiKey });
+  const client = new Groq({ apiKey });
   const summaryResults = await Promise.allSettled(
     papers.map(async (p) => {
       const safeAbstract = wrapUserText(p.abstract!.slice(0, 1000));
-      const msg = await client.messages.create({
-        model: "claude-haiku-4-5",
+      const msg = await client.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
         max_tokens: 120,
-        messages: [
-          {
-            role: "user",
-            content: `Summarize this paper abstract in exactly 2 sentences for a research digest. Be specific about findings.
-
-Abstract: ${safeAbstract}`,
-          },
-        ],
+        messages: [{
+          role: "user",
+          content: `Summarize this paper abstract in exactly 2 sentences for a research digest. Be specific about findings.\n\nAbstract: ${safeAbstract}`,
+        }],
       });
-      return msg.content[0]?.type === "text" ? msg.content[0].text.trim() : "";
+      return msg.choices[0]?.message?.content?.trim() ?? "";
     })
   );
 
