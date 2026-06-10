@@ -61,7 +61,7 @@ Tiptap v3 with Highlight, Typography, Underline, TextAlign, Color, CharacterCoun
 
 ### Module 4 — Outline + Schedule
 - **Outline Editor** (`/outline`): 3-panel layout; `POST /api/outline/analyze` (structure score, issues, missing sections); `POST /api/outline/resources` (OpenAlex per section); Methodology Advisor tab
-- **Schedule** (`/schedule`): Phase-based writing schedule generator; Claude motivational tips; progress tracker; `POST /api/schedule`
+- **Schedule** (`/schedule`): Phase-based writing schedule generator; AI motivational tips; progress tracker; `POST /api/schedule`
 
 ### Module 5 — Collaboration
 **Peer Feedback** (`/feedback`):
@@ -91,15 +91,15 @@ Tiptap v3 with Highlight, Typography, Underline, TextAlign, Color, CharacterCoun
 | CORS | Restricted to `REPLIT_DOMAINS` in production; open in dev |
 | Helmet CSP | `defaultSrc 'self'`, no inline scripts, no frames, no objects |
 | Body size limit | `express.json({ limit: "1mb" })` — prevents large payload attacks |
-| Global Claude rate limiter | 60 req/hour per IP across all 20 AI routes (app.ts) |
+| Global Groq rate limiter | 60 req/hour per IP across all 22 AI routes (app.ts) |
 | Per-route rate limiters | Additional 40–50 req/hour limits on `language`, `pdfchat`, `concept` |
 | Concurrent request limit | Max 3 in-flight per IP for heavy AI routes |
 | Domain whitelist | `safeFetch.ts` — all outbound fetches to 11 approved academic APIs only |
-| Prompt injection | `wrapUserText()` delimiters; `validateClaudeResponse()` suspicious-pattern check |
+| Prompt injection | `wrapUserText()` delimiters; `validateGroqResponse()` suspicious-pattern check |
 | XSS audit | `LitReviewComposer` uses `escHtml()` before innerHTML — confirmed safe; no `eval` or unescaped innerHTML in user paths |
 | Input validation middleware | `middlewares/inputValidation.ts` — `sanitizeString`, `clampInt`, `isSafeUrl`, `stripHtml` helpers |
 | Abstract sanitization | `sanitize-html` strips tags from PubMed/Semantic Scholar abstracts |
-| API key guard | All Claude routes check `ANTHROPIC_API_KEY` and return 503 if missing |
+| API key guard | All Groq routes read key from `x-groq-api-key` request header; return 401 if missing |
 
 ## AI Routes Summary
 
@@ -153,7 +153,6 @@ Tiptap v3 with Highlight, Typography, Underline, TextAlign, Color, CharacterCoun
 
 | Variable | Required | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Yes (AI features) | Claude claude-haiku-4-5 for all AI routes |
 | `DATABASE_URL` | Yes | PostgreSQL connection |
 | `SESSION_SECRET` | Yes | Express session signing |
 | `NCBI_API_KEY` | Optional | PubMed 10 req/s (3 req/s without) |

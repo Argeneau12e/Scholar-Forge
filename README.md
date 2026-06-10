@@ -1,6 +1,29 @@
-# ScholarForge
+```
+  ____  _____ 
+ / ___||  ___|
+ \___ \| |_   
+  ___) |  _|  
+ |____/|_|    
 
-A full-stack AI-powered academic research assistant for students and researchers. Combines multi-source paper search with AI-driven tools for writing, analysis, and literature review.
+  S C H O L A R F O R G E
+  Free · Open Source · Academic
+```
+
+# ScholarForge — Free Academic Research Assistant
+
+> AI-powered research toolbox built by a student, for every student. Free and open source.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Deploy with Vercel](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel)](https://vercel.com/new)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-9-orange?logo=pnpm)](https://pnpm.io/)
+[![AI: Groq](https://img.shields.io/badge/AI-Groq-orange)](https://groq.com/)
+
+---
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Argeneau12e/Scholar-Forge)
+
+---
 
 ## Features
 
@@ -50,6 +73,7 @@ A full-stack AI-powered academic research assistant for students and researchers
 - Node.js 24+
 - pnpm 9+
 - PostgreSQL database
+- A free Groq API key — get one at **[console.groq.com/keys](https://console.groq.com/keys)** (the free tier is more than sufficient for personal use)
 
 ### Setup
 
@@ -69,11 +93,20 @@ pnpm --filter @workspace/api-server run dev   # API on :8080
 pnpm --filter @workspace/scholar-forge run dev # Frontend on :5173
 ```
 
-### Groq API Key
+Open [http://localhost:5173](http://localhost:5173). On first load you should see the **Groq API key prompt** — paste your key from [console.groq.com/keys](https://console.groq.com/keys) and click **Save**. The key is stored only in your browser (`localStorage`) and is never sent to or stored on the server.
 
-ScholarForge uses [Groq](https://console.groq.com/keys) (free tier available) to power all AI features. The key is **never stored on the server** — it is entered once in the browser UI, stored in `localStorage`, and sent as an `x-groq-api-key` request header with every AI request.
+Once saved you will land on the Papers search page. All 21 pages and AI features are immediately available. You can change your key at any time via the **key icon** (🔑) in the top navigation bar.
 
-On first load, the app prompts you to enter your key. You can change it any time via the **key icon** in the top navigation bar.
+### Groq API Key — How It Works
+
+ScholarForge does **not** require you to set an `ANTHROPIC_API_KEY` or any other server-side AI secret. The Groq key is:
+
+1. Entered once in the browser UI
+2. Stored in `localStorage` under `sf_groq_key`
+3. Sent as an `x-groq-api-key` request header with every AI call
+4. Read by the server only for that request — never persisted
+
+This means you can deploy ScholarForge publicly without exposing your API key.
 
 ## Environment Variables
 
@@ -88,6 +121,12 @@ On first load, the app prompts you to enter your key. You can change it any time
 ## Deployment
 
 ### Vercel
+
+One-click deploy (recommended):
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Argeneau12e/Scholar-Forge)
+
+Or deploy from the CLI:
 
 ```bash
 npm i -g vercel
@@ -143,6 +182,23 @@ api/
 - Input sanitization middleware
 - Abstract content sanitized with `sanitize-html`
 
+## Contributing
+
+Contributions are welcome. Please follow these rules:
+
+- **No `any`** — all new code must be fully typed; use `unknown` + narrowing where the shape is uncertain
+- **One feature per PR** — keep pull requests focused; large multi-feature PRs will be asked to split
+- **No new server-side secrets** — AI keys must come from the `x-groq-api-key` request header pattern, not `.env`
+- **Rate-limit new AI routes** — every new AI endpoint must register with the global limiter and add a per-route limiter if it is a heavy or streaming route
+- **Sanitize all AI output** before rendering — use `sanitize-html` or `escHtml()` for any AI-generated HTML
+- **Outbound fetches via `safeFetch`** — never call external APIs with raw `fetch`; add the domain to the allowlist in `safeFetch.ts` and document why
+- **Run `pnpm run typecheck` before opening a PR** — CI will fail on type errors
+- **No `console.log` in server code** — use `req.log` in route handlers or the `logger` singleton elsewhere
+
 ## License
 
 MIT
+
+---
+
+*Built with ❤️ by a student, for every student. ScholarForge is not affiliated with any university, publisher, or research institution.*
