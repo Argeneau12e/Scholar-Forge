@@ -1,0 +1,93 @@
+The Vercel build is failing with exit code 1 on the command:
+"pnpm install && pnpm --filter @workspace/scholar-forge run build"
+
+Please fix all of the following:
+
+─────────────────────────────────────────
+FIX 1 — vercel.json build command
+─────────────────────────────────────────
+Update the build command in vercel.json to:
+
+"pnpm install --no-frozen-lockfile && pnpm --filter @workspace/api-spec run codegen && pnpm --filter @workspace/scholar-forge run build"
+
+This ensures the Orval codegen runs first to generate the missing
+API client files before TypeScript compilation begins.
+
+Also add a "framework" field set to null and an "installCommand" 
+field set to "pnpm install --no-frozen-lockfile" to vercel.json.
+
+─────────────────────────────────────────
+FIX 2 — Node.js version
+─────────────────────────────────────────
+Add a .nvmrc file at the root containing just:
+  24
+
+Also add an "engines" field to the ROOT package.json:
+  "engines": { "node": ">=20.0.0", "pnpm": ">=9.0.0" }
+
+(Using >=20 not exactly 24 so Vercel can use its closest 
+supported LTS version without failing the engines check.)
+
+─────────────────────────────────────────
+FIX 3 — pnpm version for Vercel
+─────────────────────────────────────────
+Add a "packageManager" field to the ROOT package.json:
+  "packageManager": "pnpm@9.0.0"
+
+This explicitly tells Vercel to use pnpm and which version,
+bypassing the preinstall guard that rejects other package managers.
+
+─────────────────────────────────────────
+FIX 4 — Fix the pre-existing TypeScript errors
+─────────────────────────────────────────
+The build runs typecheck which currently fails due to pre-existing
+errors. Fix ALL of the following known errors:
+
+1. "Cannot find module '@workspace/api-client-react/src/generated/api.schemas'"
+   — affects CitationDisplay.tsx, CollectionWorkspace.tsx, 
+     ParaphrasePanel.tsx, SnippetCard.tsx, useCollection.ts, 
+     home.tsx, supervisors.tsx
+   
+   Run: pnpm --filter @workspace/api-spec run codegen
+   
+   If the codegen fails or the generated files still don't exist,
+   add stub type exports to 
+   artifacts/scholar-forge/src/lib/api-stubs.ts that satisfy the
+   imports, and update the affected files to import from the stub
+   instead of the missing generated path.
+
+2. ArgumentMapper.tsx — implicit any in tooltip state setter.
+   Add an explicit type annotation to fix it.
+
+3. home.tsx — missing queryKey in useGetWorkspaceAnalysis call.
+   Add the missing queryKey property.
+
+4. useCollection.ts — duplicate tags/order keys in object spread.
+   Remove the duplicate keys.
+
+After fixes, run: pnpm run typecheck
+It must pass with zero errors before finishing.
+
+─────────────────────────────────────────
+FIX 5 — vercel.json output directory
+─────────────────────────────────────────
+Double-check that vercel.json has:
+  "outputDirectory": "artifacts/scholar-forge/dist"
+
+And that the frontend vite.config.ts has:
+  build: { outDir: "dist" }
+(relative to the artifacts/scholar-forge package, not the root)
+
+─────────────────────────────────────────
+VERIFICATION
+─────────────────────────────────────────
+After all fixes, run this exact sequence locally and confirm
+each step exits with code 0:
+
+  pnpm install --no-frozen-lockfile
+  pnpm --filter @workspace/api-spec run codegen
+  pnpm run typecheck
+  pnpm --filter @workspace/scholar-forge run build
+
+Only commit and push once all four commands pass cleanly.
+Commit message: "fix: Vercel build — codegen, typecheck, Node version"

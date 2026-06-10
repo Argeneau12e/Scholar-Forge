@@ -276,7 +276,7 @@ export default function WritingStudioPage() {
   // Reload editor when switching docs
   useEffect(() => {
     if (editor && activeDoc.content !== undefined) {
-      editor.commands.setContent(activeDoc.content, false);
+      editor.commands.setContent(activeDoc.content);
     }
     localStorage.setItem(ACTIVE_KEY, activeId);
   }, [activeId]);
@@ -306,8 +306,8 @@ export default function WritingStudioPage() {
       const content = editor.getHTML();
       const wc = editor.storage.characterCount?.words() ?? 0;
       if (!content || content === "<p></p>") return;
-      updateDoc((doc => {
-        const snaps = [{ content, wordCount: wc, ts: Date.now() }, ...(doc as unknown as Document).snapshots ?? []].slice(0, 20);
+      updateDoc(((doc: unknown) => {
+        const snaps = [{ content, wordCount: wc, ts: Date.now() }, ...((doc as Document).snapshots ?? [])].slice(0, 20);
         return { snapshots: snaps } as Partial<Document>;
       }) as unknown as Partial<Document>);
       toast({ title: "Auto-snapshot saved" });
@@ -436,7 +436,7 @@ export default function WritingStudioPage() {
     setDocs(next);
     saveDocs(next);
     setActiveId(doc.id);
-    editor?.commands.setContent("", false);
+    editor?.commands.setContent("");
   };
 
   const exportDoc = () => {
@@ -464,7 +464,7 @@ export default function WritingStudioPage() {
   };
 
   const restoreSnapshot = (snap: { content: string; wordCount: number; ts: number }) => {
-    editor?.commands.setContent(snap.content, false);
+    editor?.commands.setContent(snap.content);
     toast({ title: "Version restored" });
   };
 

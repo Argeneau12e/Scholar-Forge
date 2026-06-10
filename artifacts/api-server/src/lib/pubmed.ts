@@ -93,8 +93,8 @@ function extractSections(
   const sections: { text: string; section: string }[] = [];
 
   try {
-    const article = (articleXml["pmc-articleset"] as Record<string, unknown>)
-      ?.["article"]?.[0] as Record<string, unknown> | undefined;
+    const article = ((articleXml["pmc-articleset"] as Record<string, unknown>)
+      ?.["article"] as unknown[])?.[0] as Record<string, unknown> | undefined;
     if (!article) return sections;
 
     const front = (article["front"] as Record<string, unknown>[])?.[0];
@@ -163,8 +163,8 @@ function extractMeta(
   abstract: string | null;
 } {
   try {
-    const article = (parsed["pmc-articleset"] as Record<string, unknown>)
-      ?.["article"]?.[0] as Record<string, unknown> | undefined;
+    const article = ((parsed["pmc-articleset"] as Record<string, unknown>)
+      ?.["article"] as unknown[])?.[0] as Record<string, unknown> | undefined;
     if (!article) return { title: "", authors: [], year: null, journal: null, doi: null, abstract: null };
 
     const front = (article["front"] as Record<string, unknown>[])?.[0];
@@ -181,11 +181,11 @@ function extractMeta(
     const contribGroup = (articleMeta?.["contrib-group"] as Record<string, unknown>[])?.[0];
     const contribs = (contribGroup?.["contrib"] as Record<string, unknown>[]) ?? [];
     const authorNames = contribs
-      .filter((c) => (c as Record<string, unknown>)["$"]?.["contrib-type"] === "author")
+      .filter((c) => ((c as Record<string, unknown>)["$"] as Record<string, unknown>)?.["contrib-type"] === "author")
       .map((c) => {
         const name = (c["name"] as Record<string, unknown>[])?.[0];
         const surname = pickText((name?.["surname"] as unknown[])?.[0]);
-        return surname || pickText(c["string-name"]?.[0]);
+        return surname || pickText((c["string-name"] as unknown[])?.[0]);
       })
       .filter(Boolean);
     const authors =
@@ -200,8 +200,8 @@ function extractMeta(
 
     // Journal
     const journal = pickText(
-      (journalMeta?.["journal-title-group"] as Record<string, unknown>[])?.[0]
-        ?.["journal-title"]?.[0]
+      ((journalMeta?.["journal-title-group"] as Record<string, unknown>[])?.[0]
+        ?.["journal-title"] as unknown[])?.[0]
     ).trim() || null;
 
     // DOI

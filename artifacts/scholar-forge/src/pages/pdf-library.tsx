@@ -128,7 +128,9 @@ function PDFChat({ entry, onClose }: { entry: PDFEntry; onClose: () => void }) {
 
   const copyMsg = (text: string) => { navigator.clipboard.writeText(text); toast({ title: "Copied" }); };
 
-  const thesisQ = config?.thesisStatement ? `How does this relate to: "${config.thesisStatement.slice(0, 80)}…"?` : null;
+  const thesisQ = config && "thesisStatement" in config && (config as Record<string, unknown>).thesisStatement
+    ? `How does this relate to: "${String((config as Record<string, unknown>).thesisStatement).slice(0, 80)}…"?`
+    : null;
 
   return (
     <div className="flex flex-col h-full bg-card border-l border-border">
@@ -250,7 +252,7 @@ export default function PDFLibraryPage() {
       for (let i = 1; i <= Math.min(pageCount, 20); i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        fullText += content.items.map((it: { str?: string }) => it.str ?? "").join(" ") + "\n";
+        fullText += content.items.map((it) => ((it as unknown) as { str?: string }).str ?? "").join(" ") + "\n";
       }
 
       const doiMatch = fullText.match(/10\.\d{4,}\/[^\s"<>]+/);

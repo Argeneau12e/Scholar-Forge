@@ -13,6 +13,7 @@ import {
   getGetSearchHistoryQueryKey,
   getGetWorkspaceQueryKey,
   getGetWorkspaceStatsQueryKey,
+  getGetWorkspaceAnalysisQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -294,7 +295,7 @@ function WorkspaceView() {
     data: analysis,
     isLoading: isLoadingAnalysis,
     refetch: fetchAnalysis,
-  } = useGetWorkspaceAnalysis({ query: { enabled: false } });
+  } = useGetWorkspaceAnalysis({ query: { enabled: false, queryKey: getGetWorkspaceAnalysisQueryKey() } });
 
   const queryClient = useQueryClient();
   const { toast } = useToast();

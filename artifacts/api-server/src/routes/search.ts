@@ -94,7 +94,7 @@ type AnySourceResult =
 
 function toUnified(p: AnySourceResult, source: string): UnifiedPaper {
   const base = {
-    id: p.id,
+    id: "id" in p ? (p as { id: string }).id : (p as PubMedPaper).pmcid,
     title: p.title,
     authors: p.authors,
     abstract: p.abstract ?? null,

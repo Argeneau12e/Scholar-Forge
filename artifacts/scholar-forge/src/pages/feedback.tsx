@@ -142,7 +142,7 @@ function CommentCard({ comment, onUpdate, onDelete }: {
 export default function FeedbackPage() {
   const [sessions, setSessions] = useState<ReviewSession[]>(loadSessions);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(sessions[0]?.id ?? null);
-  const [newComment, setNewComment] = useState({ text: "", selection: "", author: "", role: "supervisor" as const, priority: "minor" as const });
+  const [newComment, setNewComment] = useState<{ text: string; selection: string; author: string; role: Comment["role"]; priority: Comment["priority"] }>({ text: "", selection: "", author: "", role: "supervisor", priority: "minor" });
   const [showNewComment, setShowNewComment] = useState(false);
   const [importText, setImportText] = useState("");
   const [showImport, setShowImport] = useState(false);

@@ -44,10 +44,10 @@ function readCollection(): CollectionItem[] {
     const items = JSON.parse(raw) as CollectionItem[];
     // Migrate older items that are missing new fields
     return items.map((item, idx) => ({
-      tags: [],
-      order: idx,
       paraphrase: "",
       ...item,
+      tags: item.tags ?? [],
+      order: item.order ?? idx,
       addedAt: item.addedAt ?? item.savedAt ?? new Date().toISOString(),
       kind: item.kind ?? "paper",
     }));

@@ -1,5 +1,5 @@
 import { apiFetch } from "@/lib/apiFetch";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type Dispatch, type SetStateAction } from "react";
 import * as d3 from "d3";
 import { Network, Download, AlertTriangle, ChevronRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -113,7 +113,7 @@ function renderGraph(
   itemMap: Map<string, CollectionItem>,
   onSelectNode: (id: string | null, edges: ArgEdge[]) => void,
   onHoverEdge: (note: string | null) => void,
-  onTooltip: (t: TooltipState | null) => void
+  onTooltip: Dispatch<SetStateAction<TooltipState | null>>
 ): () => void {
   const W = svgEl.clientWidth || 800;
   const H = svgEl.clientHeight || 520;

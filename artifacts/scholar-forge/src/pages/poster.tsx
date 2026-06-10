@@ -53,7 +53,7 @@ export default function PosterBuilderPage() {
           discipline: config?.discipline ?? "general",
           collection: items.slice(0, 15),
           authors: authorName || "Author",
-          institution: config && "universityName" in config ? (config as Record<string, unknown>).universityName : "",
+          institution: config && "universityName" in config ? (config as unknown as Record<string, unknown>).universityName : "",
           collectionSummary,
         }),
       });
