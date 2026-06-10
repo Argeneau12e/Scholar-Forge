@@ -1,0 +1,73 @@
+The Vercel build is failing at the install step with:
+ERR_PNPM_WORKSPACE_PKG_NOT_FOUND — "@workspace/api-zod@workspace:*" 
+is in the dependencies but no package named "@workspace/api-zod" 
+is present in the workspace.
+
+The build log also shows that 144 files were removed by .vercelignore,
+including critical workspace packages under lib/ and backend source 
+files under artifacts/api-server/. This is the root cause — the 
+.vercelignore is deleting packages that pnpm needs to resolve the 
+workspace graph during install.
+
+─────────────────────────────────────────
+FIX 1 — Rewrite .vercelignore completely
+─────────────────────────────────────────
+Replace the entire contents of .vercelignore with ONLY this:
+
+  # Development and environment files
+  .env
+  .env.*
+  !.env.example
+
+  # Replit-specific files
+  .replit
+  .replitignore
+
+  # Large media/asset folders not needed for build
+  attached_assets
+
+  # Test files
+  **/*.test.ts
+  **/*.spec.ts
+
+DO NOT ignore anything under lib/, artifacts/, scripts/, or any
+package.json / tsconfig files. The workspace packages (@workspace/db,
+@workspace/api-zod, @workspace/api-spec, @workspace/api-client-react)
+must all be present for pnpm to resolve dependencies correctly.
+
+The api-server source files MUST also be present because the Vercel
+serverless handler at api/index.ts imports from it.
+
+─────────────────────────────────────────
+FIX 2 — Confirm pnpm-workspace.yaml is correct
+─────────────────────────────────────────
+Make sure pnpm-workspace.yaml includes all packages:
+
+  packages:
+    - 'artifacts/*'
+    - 'lib/*'
+    - 'scripts'
+
+If api/ is a standalone package (for the Vercel handler), add it too:
+    - 'api'
+
+─────────────────────────────────────────
+FIX 3 — Check api/index.ts imports
+─────────────────────────────────────────
+Open api/index.ts and make sure it does not use any relative 
+imports that would break when the file structure shifts in 
+Vercel's build environment. All imports from the api-server 
+should use the @workspace/api-server package name, not relative 
+paths like ../../artifacts/api-server/src/app.
+
+─────────────────────────────────────────
+VERIFICATION
+─────────────────────────────────────────
+After the fix, run locally:
+
+  pnpm install --no-frozen-lockfile
+
+It must complete with "Done" and zero ERR_PNPM_WORKSPACE_PKG_NOT_FOUND
+errors before committing.
+
+Commit message: "fix: .vercelignore was stripping workspace packages"
